@@ -1,0 +1,470 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  isActive     Boolean   @default(true)
+  profile      Profile?
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Profile {
+  id                  String                   @id @default(cuid())
+  userId              String                   @unique
+  niche               String
+  displayName         String?
+  state               String                   @default("learning")
+  activeAccountId     String?                  // last selected social account (persists across devices)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns           Campaign[]
+  socialAccounts      SocialAccount[]
+  marketplaceAccounts MarketplaceAccount[]
+  learnings           Learning[]
+  llmConfig           LlmConfig?
+  narrativePatterns   NarrativePattern[]
+  narrators           Narrator[]
+  globalInsights      GlobalInsight[]
+  recommendations     NarratorRecommendation[]
+  products            Product[]
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NARRATOR — core entity for the new intelligence layer
+// ─────────────────────────────────────────────────────────────────
+
+model Narrator {
+  id                      String                   @id @default(cuid())
+  profileId               String
+  name                    String                   // AI-generated: "Laura", "Rafael"
+  sex                     String                   // "female" | "male"
+  ageRange                String                   // "18-25" | "26-35" | "36-45" | "46+"
+  maritalStatus           String                   // "single" | "dating" | "married" | "divorced"
+  hasChildren             Boolean                  @default(false)
+  livesAlone              Boolean                  @default(false)
+  status                  String                   @default("active") // "active" | "paused"
+  // Aggregated metrics (updated as trends are published)
+  totalNarratives         Int                      @default(0)
+  totalClicks             Int                      @default(0)
+  totalImpressions        Int                      @default(0)
+  totalConversions        Int                      @default(0)
+  totalRevenueBrl         Float                    @default(0)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  profile                 Profile                  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  campaigns               Campaign[]
+  trends                  Trend[]
+  hypotheses              NarratorHypothesis[]
+  insights                NarratorInsight[]
+  accountNarrators        AccountNarrator[]
+  receivedRecommendations NarratorRecommendation[] @relation("TargetRecommendation")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NARRATOR HYPOTHESIS — what the AI is actively testing per narrator+niche
+// ─────────────────────────────────────────────────────────────────
+
+model NarratorHypothesis {
+  id          String   @id @default(cuid())
+  narratorId  String
+  niche       String   // niche context: "casa", "eletrônicos", "moda", etc.
+  dimension   String   // "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType"
+  value       String   // the specific value being tested
+  status      String   @default("testing") // "testing" | "winner" | "loser"
+  usageCount  Int      @default(0)
+  winCount    Int      @default(0)
+  totalCtr    Float    @default(0)
+  confidence  Float    @default(0)  // 0-1, updated as data accumulates
+  uplift      Float    @default(0)  // % improvement vs baseline
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  narrator    Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
+
+  @@unique([narratorId, dimension, value, niche])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NARRATOR INSIGHT — discovered learnings specific to one narrator+niche
+// ─────────────────────────────────────────────────────────────────
+
+model NarratorInsight {
+  id          String   @id @default(cuid())
+  narratorId  String
+  niche       String
+  title       String
+  body        String
+  dimension   String   // which dimension this insight is about
+  confidence  Float    @default(0)
+  sampleSize  Int      @default(0)
+  impact      String   @default("positive") // "positive" | "negative" | "neutral"
+  createdAt   DateTime @default(now())
+  narrator    Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────
+// GLOBAL INSIGHT — cross-narrator learnings per profile+niche
+// ─────────────────────────────────────────────────────────────────
+
+model GlobalInsight {
+  id             String   @id @default(cuid())
+  profileId      String
+  niche          String
+  title          String
+  body           String   // human-readable insight text
+  dimension      String
+  confidence     Float    @default(0)  // 0-1
+  sampleSize     Int      @default(0)
+  narratorFilter String?  // e.g. "female|married|hasChildren" — which narrator profile this applies to
+  impact         String   @default("positive")
+  createdAt      DateTime @default(now())
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NARRATOR RECOMMENDATION — AI suggestion requiring explicit user approval
+// Identity (sex, age, etc.) NEVER changes automatically.
+// ─────────────────────────────────────────────────────────────────
+
+model NarratorRecommendation {
+  id               String    @id @default(cuid())
+  profileId        String
+  niche            String
+  type             String    // "create_narrator" | "test_narrator" | "compare_narrators"
+  title            String
+  reasoning        String    // human-readable explanation of WHY
+  evidence         String    // JSON: { retention, ctr, conversions, comments, confidence, sampleSize, dimensionInsights[] }
+  suggestedProfile String?   // JSON: { sex, ageRange, maritalStatus, hasChildren, livesAlone } — for create_narrator
+  targetNarratorId String?   // for test_narrator / compare_narrators
+  status           String    @default("pending") // "pending" | "accepted" | "dismissed" | "in_progress"
+  confidence       Float     @default(0)  // 0-1 statistical confidence
+  sampleSize       Int       @default(0)
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+  profile          Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetNarrator   Narrator? @relation("TargetRecommendation", fields: [targetNarratorId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ACCOUNT NARRATOR — N:N join: SocialAccount ↔ Narrator
+// One narrator active per account; full history never deleted.
+// ─────────────────────────────────────────────────────────────────
+
+model AccountNarrator {
+  id               String        @id @default(cuid())
+  socialAccountId  String
+  narratorId       String
+  isActive         Boolean       @default(false)
+  startedAt        DateTime      @default(now())
+  endedAt          DateTime?
+  reason           String?       // why this narrator was assigned / switched
+  // Performance snapshot for this narrator × account period
+  totalNarratives  Int           @default(0)
+  totalClicks      Int           @default(0)
+  totalImpressions Int           @default(0)
+  totalConversions Int           @default(0)
+  avgCtr           Float         @default(0)
+  createdAt        DateTime      @default(now())
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  narrator         Narrator      @relation(fields: [narratorId], references: [id], onDelete: Cascade)
+
+  @@unique([socialAccountId, narratorId])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CAMPAIGN — updated: now optionally linked to a Narrator
+// ─────────────────────────────────────────────────────────────────
+
+model Campaign {
+  id              String          @id @default(cuid())
+  profileId       String
+  socialAccountId String?         // which social account this campaign publishes to
+  narratorId      String?         // optional — campaigns can run without a narrator
+  name            String
+  productId      String?         // optional link to Product catalog
+  productUrl     String
+  productName    String
+  marketplace    String          @default("shopee")
+  targetNetwork  String
+  objective      String          @default("sales")
+  language       String          @default("pt-BR")
+  status         String          @default("testing")
+  mode           String          @default("test")
+  aiModel        String          @default("simulated")
+  approvalMode   String          @default("manual")
+  trendsPerDay   Int             @default(2)
+  postsPerDay    Int             @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  customSchedule String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  pausedAt       DateTime?
+  endedAt        DateTime?
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  socialAccount  SocialAccount?  @relation(fields: [socialAccountId], references: [id])
+  narrator       Narrator?       @relation(fields: [narratorId], references: [id])
+  product        Product?        @relation(fields: [productId], references: [id])
+  trends         Trend[]
+  publications   Publication[]
+  learnings      Learning[]
+  events         CampaignEvent[]
+  generationJobs GenerationJob[]
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TREND — updated: now tracks narrator + all experiment dimensions
+// ─────────────────────────────────────────────────────────────────
+
+model Trend {
+  id               String        @id @default(cuid())
+  campaignId       String
+  narratorId       String?       // which narrator told this story
+  format           String
+  hook             String
+  narrativeSummary String
+  status           String        @default("draft")
+  qualityScore     Float?
+  postsCount       Int           @default(0)
+  scheduledAt      DateTime?
+  publishedAt      DateTime?
+  totalClicks      Int           @default(0)
+  totalImpressions Int           @default(0)
+  totalConversions Int           @default(0)
+  totalRevenueBrl  Float         @default(0)
+  // Experiment dimensions — every narrative is an experiment data point
+  productStrategy  String?       // "clickbait" | "contextual" | "hybrid"
+  tone             String?       // "emocional" | "objetivo" | "reflexivo" | "leve" | "intenso"
+  rhythm           String?       // "rápido" | "médio" | "lento"
+  structureType    String?       // "staircase" | "flash" | "reflection" | "decision"
+  openingStyle     String?       // "ação direta" | "contexto primeiro" | "emoção primeiro"
+  conflictType     String?       // "familiar" | "financeiro" | "relacionamento" | "trabalho" | "cotidiano"
+  questionType     String?       // "moral" | "experiência" | "decisão" | "validação"
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  campaign         Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  narrator         Narrator?     @relation(fields: [narratorId], references: [id])
+  posts            TrendPost[]
+  publications     Publication[]
+}
+
+model TrendPost {
+  id          String       @id @default(cuid())
+  trendId     String
+  position    Int
+  content     String
+  hasMedia    Boolean      @default(false)
+  mediaType   String?
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  trend       Trend        @relation(fields: [trendId], references: [id], onDelete: Cascade)
+  publication Publication?
+}
+
+model Publication {
+  id          String      @id @default(cuid())
+  campaignId  String
+  trendId     String?
+  trendPostId String?     @unique
+  scheduledAt DateTime
+  publishedAt DateTime?
+  status      String      @default("scheduled")
+  clicks      Int?
+  impressions Int?
+  conversions Int?
+  revenueBrl  Float?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  trend       Trend?      @relation(fields: [trendId], references: [id])
+  trendPost   TrendPost?  @relation(fields: [trendPostId], references: [id])
+}
+
+model Learning {
+  id          String    @id @default(cuid())
+  profileId   String
+  campaignId  String?
+  summary     String
+  type        String    @default("format")
+  impact      String    @default("positive")
+  autoApplied Boolean   @default(true)
+  recordedAt  DateTime  @default(now())
+  state       String    @default("active")
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  campaign    Campaign? @relation(fields: [campaignId], references: [id])
+}
+
+model SocialAccount {
+  id               String            @id @default(cuid())
+  profileId        String
+  network          String
+  externalId       String?
+  username         String?
+  displayName      String?           // human label, e.g. "Casa Real"
+  status           String            @default("active")
+  isMock           Boolean           @default(true)
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  profile          Profile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  accountNarrators AccountNarrator[]
+  campaigns        Campaign[]
+
+  @@index([profileId])
+  @@index([profileId, network])
+}
+
+model LlmConfig {
+  id        String   @id @default(cuid())
+  profileId String   @unique
+  provider  String   @default("simulated")
+  apiKey    String   @default("")
+  model     String   @default("")
+  baseUrl   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model GenerationJob {
+  id          String    @id @default(cuid())
+  campaignId  String
+  trendId     String?
+  status      String    @default("pending")
+  statusLabel String    @default("Aguardando...")
+  progress    Int       @default(0)
+  result      String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model CampaignEvent {
+  id          String   @id @default(cuid())
+  campaignId  String
+  type        String
+  title       String
+  description String?
+  metadata    String?
+  createdAt   DateTime @default(now())
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model NarrativePattern {
+  id         String   @id @default(cuid())
+  profileId  String
+  type       String
+  value      String
+  usageCount Int      @default(0)
+  winCount   Int      @default(0)
+  totalCtr   Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, type, value])
+}
+
+model MarketplaceAccount {
+  id          String   @id @default(cuid())
+  profileId   String
+  marketplace String
+  affiliateId String?
+  status      String   @default("active")
+  isMock      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, marketplace])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PRODUCT — affiliate product imported from Shopee or manually
+// ─────────────────────────────────────────────────────────────────
+
+model Product {
+  id               String           @id @default(cuid())
+  profileId        String
+  marketplace      String           @default("shopee")
+  externalId       String?          // marketplace product ID
+  shopId           String?          // marketplace shop/seller ID
+  name             String
+  description      String           @default("")
+  category         String           @default("")
+  subcategory      String           @default("")
+  imageUrl         String           @default("")
+  price            Float            @default(0)
+  promotionalPrice Float?
+  commission       Float            @default(0)    // absolute BRL value
+  commissionPct    Float            @default(0)    // percentage 0-100
+  rating           Float?
+  soldCount        Int              @default(0)
+  shopName         String           @default("")
+  originalUrl      String
+  affiliateUrl     String           @default("")
+  dataSource       String           @default("manual") // "shopee_api" | "link_scrape" | "manual"
+  lastSyncedAt     DateTime?
+  analysisStatus   String           @default("pending") // "pending" | "analyzing" | "ready" | "failed"
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  profile          Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  analysis         ProductAnalysis?
+  campaigns        Campaign[]
+
+  @@index([profileId])
+  @@index([profileId, marketplace])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PRODUCT ANALYSIS — narrative universe derived from the product
+// Splits confirmed facts (from product data) vs AI inferences
+// ─────────────────────────────────────────────────────────────────
+
+model ProductAnalysis {
+  id                String   @id @default(cuid())
+  productId         String   @unique
+  // Epistemics: what we know vs what the AI inferred
+  confirmedFacts    String   @default("[]")   // JSON: string[] — sourced from product data
+  aiInferences      String   @default("[]")   // JSON: string[] — AI-derived, must be labelled as such
+  // Narrative universe
+  targetAudience    String   @default("[]")   // JSON: string[]
+  usageOccasions    String   @default("[]")   // JSON: string[]
+  pains             String   @default("[]")   // JSON: string[]
+  benefits          String   @default("[]")   // JSON: string[]
+  scenarios         String   @default("[]")   // JSON: string[]
+  characters        String   @default("[]")   // JSON: string[]
+  conflicts         String   @default("[]")   // JSON: string[]
+  compatibleObjects String   @default("[]")   // JSON: string[]
+  bridgeTopics      String   @default("[]")   // JSON: string[]
+  restrictions      String   @default("[]")   // JSON: string[]
+  // Classification
+  detectedCategory  String   @default("")
+  categoryLabel     String   @default("")
+  confidence        String   @default("low")  // "high" | "medium" | "low"
+  analysisVersion   Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,40 @@
+# Dependencies
+platform/node_modules/
+platform/.pnp
+platform/.pnp.*
+platform/.yarn/*
+!platform/.yarn/patches
+!platform/.yarn/plugins
+!platform/.yarn/releases
+!platform/.yarn/versions
+
+# Next.js
+platform/.next/
+platform/out/
+platform/build/
+
+# Database
+platform/*.db
+platform/prisma/*.db
+
+# Logs
+platform/*.log
+platform/dev-server*.log
+
+# Environment variables
+platform/.env*
+
+# TypeScript
+platform/*.tsbuildinfo
+platform/next-env.d.ts
+
+# Prisma generated
+platform/src/generated/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.pem
