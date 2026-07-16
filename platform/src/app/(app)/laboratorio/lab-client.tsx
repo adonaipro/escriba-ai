@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -74,6 +75,37 @@ interface PipelineDebug {
   durationMs: number;
   provider: string;
   model: string;
+  voiceExperiment?: {
+    mode: string;
+    dimension: string;
+    value: string;
+    selected: boolean;
+    applied: boolean;
+    hintText: string | null;
+    ragExampleIndices: number[];
+    seed: number;
+    seedSentToApi: boolean;
+    promptVersion: string;
+  };
+  incidentExperiment?: {
+    enabled: boolean;
+    candidates: Array<{
+      incident: string;
+      curiosityScore: number;
+      storyDepth: number;
+      productFit: number;
+      totalScore: number;
+    }>;
+    selectedIncident: string;
+    rejectedIncidents: string[];
+    curiosityScore: number;
+    storyDepth: number;
+    productFit: number;
+    totalScore: number;
+    incidentInjected: boolean;
+    incidentFollowed: boolean;
+    retryTriggered: boolean;
+  };
 }
 
 interface LabNarrative {
@@ -149,6 +181,7 @@ const SECTIONS = [
   { id: "benchmark",  label: "Benchmark",             icon: BarChart3 },
   { id: "comparar",   label: "Comparar Narradores",   icon: GitCompare },
   { id: "estrategias",label: "Testar Estratégias",    icon: Zap },
+  { id: "exploracao", label: "Explorar Voz",          icon: SlidersHorizontal },
   { id: "voz",        label: "Voz do Narrador",       icon: User },
 ] as const;
 
@@ -317,6 +350,91 @@ function PipelineDebugPanel({ debug }: { debug: PipelineDebug }) {
               </p>
             </div>
           </div>
+
+          {/* Voice Experiment */}
+          {debug.voiceExperiment && (
+            <div>
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Experimento de Voz</p>
+              <div className="rounded bg-zinc-800/50 p-2 space-y-1 text-[11px]">
+                <p>
+                  <span className="text-zinc-600">variante:</span>{" "}
+                  <span className={debug.voiceExperiment.value === "control" ? "text-zinc-500" : "text-emerald-400 font-medium"}>
+                    {debug.voiceExperiment.value}
+                  </span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">hint enviada:</span>{" "}
+                  {debug.voiceExperiment.hintText
+                    ? <span className="text-zinc-300 font-mono">"{debug.voiceExperiment.hintText}"</span>
+                    : <span className="text-zinc-500">nenhuma (controle)</span>
+                  }
+                </p>
+                <p>
+                  <span className="text-zinc-600">aplicado:</span>{" "}
+                  <span className={debug.voiceExperiment.applied ? "text-emerald-400" : "text-zinc-500"}>
+                    {debug.voiceExperiment.applied ? "sim" : "não (controle)"}
+                  </span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">RAG indices:</span>{" "}
+                  <span className="text-zinc-400 font-mono">[{debug.voiceExperiment.ragExampleIndices.join(", ")}]</span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">seed:</span>{" "}
+                  <span className="text-zinc-400 font-mono">{debug.voiceExperiment.seed}</span>{" "}
+                  <span className={debug.voiceExperiment.seedSentToApi ? "text-emerald-400/70" : "text-zinc-500"}>
+                    ({debug.voiceExperiment.seedSentToApi ? "enviado à API" : "não suportado pelo provider"})
+                  </span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">versão:</span>{" "}
+                  <span className="text-zinc-500">{debug.voiceExperiment.promptVersion}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Drama Engine */}
+          {debug.incidentExperiment && (
+            <div>
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Drama Engine</p>
+              <div className="rounded bg-zinc-800/50 p-2 space-y-1 text-[11px]">
+                <p>
+                  <span className="text-zinc-600">incidente injetado:</span>{" "}
+                  <span className="text-zinc-300 italic">"{debug.incidentExperiment.selectedIncident}"</span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">score total:</span>{" "}
+                  <span className="text-emerald-400 font-medium">{debug.incidentExperiment.totalScore}/100</span>
+                  <span className="text-zinc-600 text-[10px]">
+                    {" "}(curiosidade: {debug.incidentExperiment.curiosityScore}/40 · profundidade: {debug.incidentExperiment.storyDepth}/30 · fit: {debug.incidentExperiment.productFit}/30)
+                  </span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">candidatos:</span>{" "}
+                  <span className="text-zinc-400">{debug.incidentExperiment.candidates.length} gerados</span>
+                  <span className="text-zinc-600">{" "}·{" "}</span>
+                  <span className="text-zinc-500">{debug.incidentExperiment.rejectedIncidents.length} descartados</span>
+                </p>
+                <p>
+                  <span className="text-zinc-600">seguido pelo Writer:</span>{" "}
+                  <span className={debug.incidentExperiment.incidentFollowed ? "text-emerald-400 font-medium" : "text-red-400 font-medium"}>
+                    {debug.incidentExperiment.incidentFollowed ? "sim" : "não"}
+                  </span>
+                </p>
+                {debug.incidentExperiment.retryTriggered && (
+                  <p>
+                    <span className="text-zinc-600">retry:</span>{" "}
+                    <span className="text-yellow-400">disparado</span>
+                    {" · "}
+                    <span className={debug.incidentExperiment.incidentFollowed ? "text-emerald-400" : "text-red-400"}>
+                      {debug.incidentExperiment.incidentFollowed ? "corrigido" : "fallback usado"}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Score breakdown */}
           <div>
@@ -773,6 +891,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
       if (mode === "benchmark")   { body.narratorId = narratorId; body.count = benchmarkCount; }
       if (mode === "compare")     { body.narratorIds = compareIds; }
       if (mode === "strategy")    { body.narratorId = narratorId; }
+      if (mode === "exploration") { body.narratorId = narratorId; }
 
       const res = await fetch("/api/laboratorio", {
         method: "POST",
@@ -1158,6 +1277,51 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                           strategyLabel={labels[idx]}
                           onPromote={openPromote}
                         />
+                      </div>
+                    );
+                  })}
+                  {result.entityExplanation && <EntityBox explanation={result.entityExplanation} />}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SECTION: Explorar Voz ───────────────────────────────── */}
+          {section === "exploracao" && (
+            <div className="space-y-4">
+              {SandboxNotice}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+                <p className="text-xs text-zinc-500">
+                  Gera 4 histórias com a mesma narradora, produto, seed e exemplos RAG. Muda apenas uma linha de voz.
+                  Serve para identificar se o tom influencia a escrita.
+                </p>
+                {NarratorSelect}
+                {ProductSelectorComponent}
+                <Button
+                  onClick={() => void generate("exploration")}
+                  disabled={loading || narrators.length === 0}
+                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
+                  {loading ? "Gerando 4 variantes…" : "Gerar controle + leve + direta + emocional"}
+                </Button>
+              </div>
+
+              {error && <p className="text-sm text-red-400 px-1">{error}</p>}
+
+              {result && (
+                <div className="space-y-3">
+                  {result.narratives.map((n) => {
+                    const ve = (n.pipelineDebug as PipelineDebug | undefined)?.voiceExperiment;
+                    const label = ve?.value === "control"
+                      ? "Controle (sem hint)"
+                      : ve?.hintText ?? ve?.value ?? n.id;
+                    return (
+                      <div key={n.id}>
+                        <p className="text-xs font-semibold text-zinc-400 mb-1.5 px-1 uppercase tracking-wide">
+                          {label}
+                        </p>
+                        <NarrativeCard narrative={n} onPromote={openPromote} />
                       </div>
                     );
                   })}

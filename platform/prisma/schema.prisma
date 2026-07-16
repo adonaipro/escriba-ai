@@ -3,7 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -322,6 +323,8 @@ model SocialAccount {
   displayName      String?           // human label, e.g. "Casa Real"
   status           String            @default("active")
   isMock           Boolean           @default(true)
+  accessToken      String?
+  tokenExpiresAt   DateTime?
   lastVerifiedAt   DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

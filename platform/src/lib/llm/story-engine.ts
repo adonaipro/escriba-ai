@@ -8,9 +8,19 @@
 
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
-import type { PipelineNarratorData, StoryDebugData, StoryScore } from "./pipeline-types";
+import type { PipelineNarratorData, StoryDebugData, StoryScore, VoiceToneExperiment, VoiceExperimentData, VoiceToneValue } from "./pipeline-types";
 import { CONFLICT_BANK } from "./human-conflict-engine";
 import type { HumanConflict } from "./human-conflict-engine";
+
+// ─── Voice Experiment V0 ──────────────────────────────────────────────────────
+// Feature flag — set false to revert instantly to pre-experiment behavior
+const VOICE_EXPERIMENT_ENABLED = true;
+
+const TONE_HINTS: Record<string, string> = {
+  leve:      "Voz nesta geração: leve.",
+  direta:    "Voz nesta geração: direta.",
+  emocional: "Voz nesta geração: mais emocional.",
+};
 
 export type { StoryDebugData };
 
@@ -63,109 +73,89 @@ export interface StoryResult {
 // URLs replaced with [LINK] placeholder.
 // These teach style, rhythm, and product placement by example.
 const STORY_EXAMPLES = [
-  // pedroalvaro.ss — 161k views
   `Post 1:
-Minha namorada parou de me esperar para começar a comer. Achei que ela estivesse com pressa. Durante anos era sempre igual. A comida ficava pronta. Ela me chamava. Mesmo quando eu dizia: Já vou. Ela esperava. Às vezes dez minutos. Às vezes mais. Até que um dia cheguei à mesa e ela já estava terminando o prato. Estranhei. Perguntei: Você já começou? Ela respondeu: Sim. Falei: Mas você sempre me esperava. Ela ficou em silêncio por alguns segundos. Depois disse: Cansei de comer a comida fria.
+Descobri que minha melhor amiga ficou com meu namorado quando vi uma foto deles juntos no Instagram. Deletei o app. Abri de novo. Ainda estava lá. Fui até o apartamento dela sem avisar.
 
 Post 2:
-Não entendi. Ela continuou: Toda vez você falava "já estou indo". Aí respondia uma mensagem. Terminava um vídeo. Ia fazer mais uma coisa. Quando chegava, eu já estava sem fome. Na hora respondi: Era só me chamar de novo. Ela sorriu. Depois falou: Esse era justamente o problema. Eu sempre precisava chamar de novo. Aquilo me desmontou. Porque eu nunca achei que aqueles poucos minutos fizessem diferença. Na minha cabeça, ela só estava esperando.
+Ela abriu a porta e já sabia que eu sabia. Perguntei direto: "O que foi aquilo?" Ela ficou me olhando. Depois disse: "A gente vai conversar?" Eu disse: "Não. Eu só vim buscar minhas coisas." Peguei a sacola e fui embora. Ela ficou falando no corredor.
 
 Post 3:
-Na dela, ela estava adiando o próprio momento para se adaptar ao meu. Ela terminou dizendo uma frase que ficou comigo: Quem espera uma vez faz por carinho. Quem espera todos os dias começa a esquecer que também merece ser esperado. Passei o resto da noite pensando nisso. Porque talvez o desgaste de um relacionamento não aconteça por causa de um grande erro. Talvez ele apareça quando uma pessoa vai ajustando a própria rotina tantas vezes que deixa de perceber que sempre é ela quem está cedendo.
+Meu namorado me ligou catorze vezes. Atendi na décima quinta. Ele disse que ia explicar. Eu disse: "Não precisa." Desliguei. Fui pra casa da minha mãe e fiquei lá por três dias sem falar com ninguém.
 
 Post 4:
-E eu fiquei pensando... Na sua opinião, esperar quem a gente ama é uma demonstração de carinho... ou, quando isso acontece todos os dias, acaba mostrando que só uma pessoa está se adaptando ao relacionamento?
+No quarto dia minha prima veio me ver. Ficamos conversando até tarde. Antes de ir ela deixou isso aqui [LINK] em cima da mesa: "Comprei pensando em você. Abre quando estiver sozinha." Abri depois que ela foi. Você confrontaria os dois juntos ou separado?`,
 
-Post 5:
-Confesso que demorei para entender o que ela quis dizer. Depois encontrei isso: [LINK] Porque, no fim, o problema nunca foi o prato que esfriava. Era a pessoa que, todos os dias, deixava o próprio momento de lado esperando que eu chegasse.`,
-
-  // aline_gomeslessa — 229k views
   `Post 1:
-Meu sogro entrou na minha casa e desligou o ar-condicionado. Era um domingo muito quente. A gente estava almoçando. Meu filho brincava na sala. O ar estava ligado desde cedo. Em um momento meu sogro levantou, pegou o controle e desligou. Perguntei: Aconteceu alguma coisa? Ele respondeu: Conta de luz não nasce em árvore. Confesso que fiquei sem reação. Falei: Mas quem paga essa conta somos nós. Ele respondeu: Mesmo assim. É desperdício. Na hora meu marido deu uma risadinha. Disse:
+Minha sogra ligou pro meu chefe e disse que eu era instável emocionalmente. Fiquei sabendo dois anos depois, quando minha cunhada me mostrou o print de uma conversa onde ela admitia pra uma amiga o que tinha feito.
 
 Post 2:
-Meu pai é assim mesmo. Respirei fundo. Levantei, peguei o controle e liguei o ar de novo. Meu sogro olhou para mim e falou: Daqui a pouco vocês reclamam que o dinheiro não sobra. Respondi: Se um dia a conta apertar, eu desligo. Mas enquanto eu puder pagar, essa decisão é nossa. O clima ficou estranho pelo resto do almoço. Quando contei isso para uma amiga, ela disse: Nossa... eu teria deixado desligado para evitar confusão. Outra respondeu: Se a conta é sua, ninguém tem que decidir por você.
+Fui direto até a casa dela. Meu marido foi junto sem saber o que ia acontecer. Cheguei, coloquei o celular na mesa com o print aberto e falei: "Você quer explicar isso?" Ela ficou vermelha. Meu marido leu. Ficou em silêncio. Ela tentou falar. Ele ergueu a mão: "Não agora."
 
 Post 3:
-Até hoje meu sogro acha que eu fui desnecessária. Eu continuo achando que conselho é uma coisa. Tomar uma decisão dentro da casa dos outros é outra completamente diferente. Eu realmente exagerei... ou você também ligaria o ar de novo?
+No carro de volta pra casa, meu marido ficou vinte minutos sem dizer nada. Depois falou: "Eu não sabia." Eu disse: "Eu sei." Ficamos em silêncio o resto do caminho. Aquela noite foi a mais estranha que a gente já teve juntos.
 
 Post 4:
-Dias depois essa história ainda virou assunto aqui em casa. Quando encontrei isso [LINK] lembrei daquele almoço na mesma hora. No fim, percebi que a discussão nunca foi sobre ligar ou desligar o ar. Foi sobre uma coisa muito simples: quem mora na casa deve ter o direito de decidir como ela funciona.`,
+Uma semana depois minha irmã veio me visitar. Ficou me ajudando a organizar a cozinha — ela sempre faz isso quando algo vai mal. Antes de ir me mostrou isso aqui [LINK]: "Vi e pensei em você. Comprei pra te animar." Vocês perdoariam ou cortariam de vez?`,
 
-  // taylaca — 433k views
   `Post 1:
-Meu cunhado começou a chegar do trabalho e tomar banho no escuro. No escuro mesmo, sem acender a luz do banheiro. Minha irmã estranhou, perguntou várias vezes. Ele sempre respondia que era só cansaço. Até que um dia ela entrou no banheiro e encontrou ele sentado no chão, a água caindo, sem pressa nenhuma para sair dali. Foi quando ele falou a verdade.
+Meu cunhado tentou me beijar na cozinha durante o aniversário do meu marido. Eu tinha ido buscar uma bebida. Ele apareceu do nada e falou: "Sempre gostei de você." Congelei. Voltei pra sala e fiquei sorrindo pro meu marido pelo resto da noite como se nada tivesse acontecido.
 
 Post 2:
-Disse que aquele era o único lugar da casa onde ninguém esperava nada dele, nem conversa, nem solução, nem força, nem sorriso. Nada. Minha irmã me contou que ficou sem reação, pq durante o dia ele parecia normal, trabalhava, brincava, resolvia problemas, pagava contas, fazia piadas. Como se estivesse tudo bem. Mas as vezes a pessoa que parece mais forte é justamente a que está mais cansada, a que aprendeu a sofrer em silêncio para não preocupar ninguém.
+Em casa, contei tudo. Meu marido ouviu sem interromper. Quando terminei ele ficou quieto uns dois minutos. Então falou: "Você pode ter entendido diferente." Olhei pra ele. "Diferente como?" Ele se levantou e foi pro quarto.
 
 Post 3:
-E acho que esse é o tipo de dor que mais assusta, a dor que continua funcionando, que continua produzindo, que continua sorrindo. Pq ninguém pergunta como está quem nunca deixa de dar conta. E quem nunca deixa de dar conta acaba carregando o peso de todo mundo sozinho. Quantas pessoas vc acha que estão exaustas neste momento, mas ninguém percebe porque elas continuam funcionando?
+Dormi no sofá. De madrugada meu marido veio me buscar. Disse que tinha processado e que ia falar com o irmão. Na manhã seguinte ele fez isso. Não sei o que foi dito. Meu cunhado me mandou mensagem pedindo desculpa. Não respondi.
 
 Post 4:
-minha irmã convenceu meu cunhado a procurar ajuda. o profissional explicou que ele estava vivendo um nível de sobrecarga muito maior do que ele imaginava. nesse período, ela também usou isso aqui [LINK] e disse que queria fazer tudo o que estivesse ao alcance dela para ajudar. foi a primeira vez, em muito tempo, que ele aceitou que precisava cuidar de si. vocês acham que hoje em dia muita gente só procura ajuda quando já chegou no próprio limite?`,
+Minha amiga ligou pra saber como eu estava. No final falou que ia passar em casa. Chegou com isso aqui [LINK]: "Vi e lembrei de você. Sem motivo nenhum." Ainda bem que tem gente assim. Eu fui ingênua em contar pro meu marido ou fiz certo?`,
 
-  // taylaca — 54,8k views
   `Post 1:
-Minha amiga veio passar a tarde aqui em casa. A gente tomou café, conversou, deu risada e ela foi embora como sempre. Mais tarde, fui guardar umas coisas na cozinha e encontrei um envelope em cima da geladeira. Dentro tinha R$ 200 e um bilhete escrito: "Compra umas coisas pra casa. Sei que às vezes aperta e você não vai aceitar se eu oferecer." Na hora eu fiquei sem reação. Mandei mensagem perguntando por que ela tinha feito aquilo. Ela respondeu: "Foi de coração.
+Minha vizinha espalhou pelo prédio que eu estava tendo um caso com o marido dela. Soube porque minha outra vizinha veio até mim com pena. Bati na porta dela no mesmo dia.
 
 Post 2:
-Não queria te constranger, só ajudar." Eu sei que a intenção foi boa. Mas o que ficou na minha cabeça foi outra coisa: Em que momento eu passei a imagem de que precisava que alguém escondesse dinheiro dentro da minha casa? Quando contei isso, as reações foram totalmente diferentes. Teve quem disse: "Eu acharia um gesto de carinho." E teve quem respondeu: "Eu também ficaria incomodado. A ajuda veio junto com uma suposição sobre a sua vida."
+Ela abriu e ficou me olhando. Perguntei: "Você foi falar isso de mim pro prédio?" Negou. Eu disse: "A moradora do 502 me contou palavra por palavra." Ela cruzou os braços: "Cada um entende do jeito que quer." Fechei a cara: "Isso não vai ficar assim."
 
 Post 3:
-A verdade é que boas intenções nem sempre impedem alguém de se sentir invadido. E às vezes o problema não é o gesto é a mensagem que ele passa. Vocês devolveriam o dinheiro ou agradeceriam e aceitariam numa boa?
+Fui até o síndico, abri reclamação formal e mandei áudio no grupo do prédio contando o que estava acontecendo. Ela respondeu me chamando de dramática. Cinco pessoas me mandaram mensagem em particular dizendo que ela já tinha feito isso com outras moradoras.
 
 Post 4:
-no dia seguinte ela voltou aqui em casa. disse que, se eu não aceitasse o dinheiro, pelo menos aceitasse isso aqui [LINK] falou que não queria me ajudar por pena, mas porque eu faria a mesma coisa por ela. Vocês aceitariam pela consideração ou devolveriam?`,
+A vizinha do 502 voltou no dia seguinte com um café. Antes de ir tirou isso aqui [LINK] da bolsa: "Vi numa loja e trouxe pra você. Você merecia um gesto bom essa semana." Às vezes a pessoa certa aparece na hora exata. Você teria ficado quieta ou feito igual a mim?`,
 
-  // osgarimposdatay — 8,4k views
   `Post 1:
-Contratei uma moça da minha vizinhança pra fazer uma limpeza pesada na minha casa enquanto eu trabalhava. Ela é mãe solo, cria dois filhos pequenos, e me perguntou se podia levar eles porque não tinha com quem deixar. Eu disse que sim, claro. Antes de sair, dei uma única instrução: "se começar a chover, só tira a roupa do varal e deixa em cima da cama." Vou ser honesta: passei o dia inteiro nervosa.
+Minha irmã contou pro meu pai que eu tinha terminado meu casamento por causa de outro homem. Não era verdade. E mesmo se fosse, não era pra ela contar. Meu pai me ligou em dez minutos.
 
 Post 2:
-A gente vê tanta história na internet sobre gente que rouba, que quebra as coisas, que faz serviço mal feito. Mesmo querendo confiar, esses pensamentos não saíam da minha cabeça. Ela também perguntou se os filhos podiam almoçar aqui. Eu deixei. Ela disse que ia deixar a chave embaixo do capacho quando terminasse. Quando cheguei em casa, fiquei em choque. A casa tava impecável. O chão brilhando, cada cômodo perfeitamente limpo, e o cheiro... simplesmente maravilhoso.
+Liguei pra ela perguntando por que tinha feito isso. Ela disse: "Tô preocupada com você." Eu disse: "Preocupada você me liga. Não vai falar pro meu pai inventando história." Ela ficou em silêncio. Depois falou: "Eu não inventei tudo." Como se isso fosse melhor.
 
 Post 3:
-Tudo limpo, organizado, parecia coisa de revista. E a roupa? Ela não deixou em cima da cama. Ela dobrou cada peça, separou tudo, e guardou nos armários. Como se isso não bastasse, tinha um café fresco me esperando na cozinha. Naquele momento, eu percebi: a gente passa tanto tempo ouvindo histórias de pessoas desonestas que esquece quantas pessoas boas, trabalhadoras e genuinamente honestas ainda existem. O melhor de tudo? Ela cobrou só R$ 250. Paguei na hora e dei uma gorjeta generosa.
+Fui até a casa dos meus pais naquele fim de semana só pra explicar tudo pessoalmente. Meu pai me ouviu. No final disse: "Eu devia ter perguntado pra você primeiro." Minha irmã não apareceu. Ainda bem.
 
 Post 4:
-Porque alguém que trata a casa dos outros com tanto cuidado merece ser reconhecido.
+Minha mãe veio me ver no apartamento dias depois. Não falou nada sobre a situação com minha irmã. Só entrou, olhou em volta e colocou isso aqui [LINK] em cima da bancada: "Vi e achei que ia combinar com você." Mãe sabe a hora certa de não falar nada. Você perdoava num mês ou precisava de mais tempo?`,
 
-Post 5:
-Gente, fiquei tão impressionada com o capricho dela que, além da gorjeta, resolvi comprar isso aqui pra agradecer [LINK] confesso que fiquei na dúvida... Vocês acham que é um mimo à altura do que ela fez ou eu tô exagerando e ela pode até ficar sem graça?`,
-
-  // osgarimposdatay — 9,6k views
   `Post 1:
-Essa semana eu precisei deixar minha filha na festa de aniversário de uma coleguinha e ir embora. Era daquelas festas em buffet onde os pais podiam deixar as crianças por algumas horas. Eu nunca tinha feito isso. Conhecia a mãe da aniversariante só de dar "bom dia" na porta da escola. Quando minha filha percebeu que eu ia embora, segurou minha mão e perguntou: "Você volta pra me buscar, né?" Aquilo acabou comigo. Abaixei, dei um beijo nela e falei que voltava rapidinho.
+Minha amiga me indicou pra uma vaga e ficou me ajudando a preparar. Currículo, simulação de entrevista, feedback. Quando me chamaram ela disse que estava feliz por mim. Fiquei sabendo depois que ela mesma tinha ligado pra empresa falando mal de mim antes da entrevista.
 
 Post 2:
-Antes de sair, só pedi uma coisa pra monitora. "Ela é um pouquinho tímida. Se ficar quietinha num canto, dá uma olhadinha nela." Ela sorriu e disse: "Pode deixar." Entrei no carro tentando agir como se fosse normal. Mas não era. Passei a tarde inteira lembrando de tudo que a gente vê. Criança que some por alguns minutos. Acidente em brinquedo. Monitor distraído. Toda vez que meu celular vibrava, eu gelava. Quando chegou a hora de buscá-la, fui quase correndo.
+Chamei ela pra tomar café. Sentei. Pedi o café. Esperei ela se acomodar. Então coloquei o celular na mesa com a mensagem aberta: "Você quer me explicar isso?" Ela ficou branca. Disse que foi mal entendido. Eu disse: "Não precisa. Eu só vim pra você saber que eu sei."
 
 Post 3:
-Assim que entrei no salão, vi minha filha sentada numa mesinha desenhando. A monitora olhou pra mim e falou: "Ela brincou bastante. Só ficou mais quietinha na hora da caça ao tesouro porque ficou com vergonha. Então eu fui fazer junto com ela." Minha filha veio correndo me mostrar o desenho. Era eu. Ela. E a monitora. Embaixo ela tinha escrito, do jeitinho dela: "Ela cuidou de mim." Eu senti um nó na garganta. Porque o combinado era só olhar as crianças.
+Paguei o meu café e fui embora. Ela ficou me ligando o dia inteiro. Não atendi. Uma semana depois ainda estava ligando. Em algum momento parei de sentir que precisava responder.
 
 Post 4:
-Mas aquela moça enxergou justamente a única que precisava de um incentivo a mais. Na saída, procurei a coordenadora do buffet só pra elogiar aquela monitora pelo nome. Ela provavelmente nem lembra de mim. Mas eu nunca vou esquecer do jeito que ela fez minha filha se sentir segura num lugar completamente novo. Às vezes a gente passa tanto tempo ouvindo histórias ruins... Que esquece que ainda existe gente que escolhe cuidar dos filhos dos outros como gostaria que cuidassem dos próprios.
+Minha colega do trabalho passou em casa na sexta. Ficamos conversando, ela trouxe pizza. Na hora de ir colocou isso aqui [LINK] na mesa: "Vi essa semana e comprei pra você. Não precisava de motivo." Às vezes a gente precisa de uma coisa boa depois de uma semana dessas. Você teria dado uma chance de explicação ou teria ido embora do café igual eu?`,
 
-Post 5:
-E teve uma coisa que eu só descobri quando cheguei em casa. Fui tirar o desenho da minha filha da mochila e encontrei isso aqui [LINK] Junto tinha um bilhetinho da monitora que dizia: "Ela foi muito corajosa hoje. No começo ficou tímida, mas depois sorriu, brincou e deixou nossa tarde muito mais feliz. Espero que ela tenha gostado tanto quanto a gente gostou dela." Confesso que chorei lendo aquilo.`,
-
-  // osgarimposdatay — 12,8k views
   `Post 1:
-Fui pagar a diarista esses dias... combinamos 150 reais. Quando ela foi embora, percebi que tinha mandado 200 no Pix. Na hora pensei: "ah, depois eu falo". Mas aí passou o dia... e ela não falou nada. Fiquei naquela dúvida... ela não viu ou fingiu que não viu? Comentei com uma amiga e ela soltou: "Ah, mas diarista ganha pouco... deixa isso pra lá." Só que não era sobre o dinheiro. Era sobre falar ou não falar.
+Meu ex publicou prints das minhas mensagens privadas num grupo com cinquenta pessoas. Mensagens de dois anos atrás, quando a gente ainda estava junto. Fiquei sabendo de manhã quando minha prima me encaminhou uma das capturas.
 
 Post 2:
-No final, mandei mensagem pra ela. falei do valor... e perguntei se ela tinha percebido. ela respondeu na hora disse que tinha visto sim... mas achou que era pra "abater" com algo que ela tinha levado de casa. na hora eu já estranhei. porque eu não tinha pedido nada. aí ela me mostrou isso aqui [LINK] foi aí que eu travei. porque não fazia sentido com o que a gente tinha combinado. até então eu achei que tinha sido distração. ficou estranho. vocês acham que foi engano ou só justificativa?`,
-
-  // amanda_vorges — 15,8k views
-  `Post 1:
-Estou conhecendo um homem faz quase um mês e estava gostando muito dele. Ontem saímos para jantar e a conversa estava ótima até ele comentar, como se fosse a coisa mais normal do mundo, que no fim de semana ia viajar com os amigos e provavelmente conhecer gente nova. Eu perguntei se ele estava aberto para conhecer outras mulheres e ele respondeu que sim, afinal a gente nem namorava. Na hora perdi completamente a vontade de continuar o encontro. Hoje decidi me afastar sem dar explicações.
-
-Post 2:
-Algumas amigas disseram que eu exagerei. Outras falaram que eu me valorizei. Você acha que, quando existe interesse de verdade, a pessoa naturalmente deixa de procurar outras opções ou isso só faz sentido depois que existe um relacionamento?
+Liguei pra ele. Atendeu na segunda chamada. Perguntei: "Por que você fez isso?" Ele disse: "Você me deixou mal." Eu disse: "E você acha que isso resolve alguma coisa?" Ele ficou em silêncio. Desliguei.
 
 Post 3:
-Eu já tinha decidido nunca mais responder ele. Só que ele apareceu com isso aqui [LINK] Confesso que, por alguns minutos, pensei em voltar atrás. Você daria uma segunda chance?`,
+Passei o dia todo respondendo mensagens de pessoas que tinham visto. Algumas com pena. Algumas com curiosidade. Uma perguntou se era verdade o que estava escrito. Respondi que não era assunto dela e bloqueei. À noite estava exausta e com raiva ao mesmo tempo.
+
+Post 4:
+Minha prima me buscou à noite. A gente saiu pra caminhar sem destino. Numa loja ela pegou isso aqui [LINK] e colocou na minha mão: "Compra. Você merece uma coisa boa hoje." Comprei. Você bloqueava ou enfrentava direto?`,
 ];
 
 // ─── HTTP utilities ───────────────────────────────────────────────────────────
@@ -217,10 +207,12 @@ async function callLLM(
   ctx: { callCount: number; totalTokens: number },
   label: string,
   retryNum = 0,
+  apiSeed?: number,
 ): Promise<string> {
   ctx.callCount++;
   const baseUrl = resolveBaseUrl(config);
   const model = config.model ?? resolveDefaultModel(config);
+  const supportsSeed = config.provider !== "anthropic";
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -236,6 +228,7 @@ async function callLLM(
       ],
       temperature: 0.95,
       max_tokens: maxTokens,
+      ...(apiSeed !== undefined && supportsSeed ? { seed: apiSeed } : {}),
     }),
   });
 
@@ -267,7 +260,7 @@ async function callLLM(
         );
       }
       await sleep(Math.min(waitMs, 120_000));
-      return callLLM(systemPrompt, userPrompt, config, maxTokens, ctx, label, retryNum + 1);
+      return callLLM(systemPrompt, userPrompt, config, maxTokens, ctx, label, retryNum + 1, apiSeed);
     }
 
     throw new Error(`Story Engine API ${res.status}: ${errText.slice(0, 200)} (${label})`);
@@ -283,16 +276,16 @@ async function callLLM(
 
 // ─── Example selection ────────────────────────────────────────────────────────
 
-function pickExamples(seed: number, count: number): string[] {
-  const pool = [...STORY_EXAMPLES];
-  // Deterministic shuffle via LCG
+function pickExamples(seed: number, count: number): { examples: string[]; indices: number[] } {
+  const indexed = STORY_EXAMPLES.map((ex, i) => ({ ex, i }));
   let s = seed >>> 0;
-  for (let i = pool.length - 1; i > 0; i--) {
+  for (let i = indexed.length - 1; i > 0; i--) {
     s = Math.imul(s, 1664525) + 1013904223;
     const j = (s >>> 0) % (i + 1);
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+    [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
   }
-  return pool.slice(0, count);
+  const chosen = indexed.slice(0, count);
+  return { examples: chosen.map(c => c.ex), indices: chosen.map(c => c.i) };
 }
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
@@ -383,6 +376,40 @@ function resolveProductLink(posts: StoryPost[], productUrl: string, seed: number
   return [...posts, { position: maxPos + 1, content }];
 }
 
+// ─── Incident validation ─────────────────────────────────────────────────────
+// Did the Writer use the incident as the central event?
+// Extracts person + content words from the incident and checks presence in output.
+
+function validateIncidentFollowed(posts: StoryPost[], incident: string): boolean {
+  const storyText = posts.map(p => p.content).join(" ").toLowerCase();
+  const incidentLower = incident.toLowerCase();
+
+  const RELATIONS = [
+    "minha mãe", "meu pai", "minha irmã", "meu irmão", "minha amiga",
+    "meu amigo", "minha colega", "meu colega", "minha vizinha", "meu vizinho",
+    "minha prima", "meu primo", "minha sogra", "meu sogro", "meu ex", "minha ex",
+    "meu namorado", "minha namorada", "meu marido", "minha filha", "meu filho",
+    "minha cunhada", "meu cunhado",
+  ];
+
+  const STOPWORDS = new Set([
+    "estava", "tinha", "para", "pelo", "pela", "sobre", "como", "quando",
+    "muito", "mais", "também", "depois", "antes", "ainda", "desde", "então",
+  ]);
+
+  const relationWords = RELATIONS
+    .filter(r => incidentLower.includes(r))
+    .flatMap(r => r.split(" ").filter(w => w.length > 2));
+  const personPresent = relationWords.some(w => storyText.includes(w));
+
+  const contentWords = incidentLower
+    .split(/\s+/)
+    .filter(w => w.length > 4 && !STOPWORDS.has(w));
+  const contentPresent = contentWords.some(w => storyText.includes(w));
+
+  return personPresent && contentPresent;
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function runStoryEngine(
@@ -393,71 +420,126 @@ export async function runStoryEngine(
   seed: number,
   config: LlmProviderConfig,
   withLink = true,
+  voiceExperiment?: VoiceToneExperiment,
+  incidentSeed?: string,
 ): Promise<StoryResult> {
   const start = Date.now();
   const model = config.model ?? resolveDefaultModel(config);
   const ctx = { callCount: 0, totalTokens: 0 };
 
-  // Pick 3 varied examples by seed
-  const examples = pickExamples(seed, 3);
+  // Pick 3 varied examples by seed — also track which indices were chosen
+  const { examples, indices: ragExampleIndices } = pickExamples(seed, 3);
 
-  // Narrator voice hint — minimal, not controlling
-  const voiceHint = narrator.expressionStyle === "dry"
-    ? "Conta de forma seca. Os fatos falam sozinhos."
-    : narrator.expressionStyle === "direct"
-    ? "Vai direto. Sem introdução longa."
-    : "";
+  // Voice Experiment V0 — resolve hint text (or null for control/disabled)
+  const toneValue: VoiceToneValue = voiceExperiment?.value ?? "control";
+  const experimentActive = VOICE_EXPERIMENT_ENABLED && !!voiceExperiment && toneValue !== "control";
+  const hintText = experimentActive ? (TONE_HINTS[toneValue] ?? null) : null;
+  const seedSentToApi = config.provider !== "anthropic";
 
-  const system = `Você é uma pessoa comum usando o Threads.
-Você lembrou de uma situação que aconteceu com você.
-Conta naturalmente. Não tenta escrever bonito. Não tenta emocionar.
-Escreve como uma pessoa escreveria — não como um escritor.${voiceHint ? `\n${voiceHint}` : ""}`;
+  const system = `Escreva como alguém mandando uma sequência de mensagens para um amigo contando o que aconteceu.
 
-  // Build product context
-  const productContext = [
-    `PRODUTO: ${productName}`,
-    universe.benefits.length > 0 ? `O que é: ${universe.benefits.slice(0, 2).join(", ")}` : "",
-    universe.pains.length > 0 ? `Pra que serve: ${universe.pains.slice(0, 2).join(", ")}` : "",
-  ].filter(Boolean).join("\n");
+Estas histórias são sobre fofoca: traição, mentira, humilhação, sabotagem. Alguém próximo fez algo grave contra a narradora.
+A narradora descobre, confronta ou é confrontada — o drama acontece dentro da história, não é só relatado.
+Exemplos do que escrever: marido traindo com a irmã. Melhor amiga ficando com o namorado. Sogra ligando pro chefe inventar mentiras. Cunhado dando em cima. Vizinha espalhando mentiras no prédio.
+Nunca escreva sobre: jantares, receitas, visitas, compras, situações cotidianas sem traição ou conflito interpessoal grave.
+
+Regras de escrita:
+- não explique sentimentos
+- não escreva reflexões
+- faça alguém agir a cada 2 ou 3 frases
+- sempre que possível use diálogo real (o que a pessoa disse, palavra por palavra)
+- nunca escreva: "percebi", "entendi", "a sensação", "era mais do que", "naquele momento", "parecia"
+- se um parágrafo não muda a situação, apague
+- linguagem de conversa: "parecia cimento" — não "estava da forma mais inusitada possível"
+- 4 posts é o ideal — não escreva mais de 5`;
+
+
+  // Strip any URLs — prevents product URL from leaking into the story
+  const stripUrls = (s: string) => s.replace(/https?:\/\/[^\s,)]+/g, "").trim();
+
+  // Give the model the CONTEXT of the product, not the name.
+  // Naming it upfront causes the model to drop it early and kill curiosity.
+  const situationContext = universe.pains.length > 0
+    ? universe.pains.slice(0, 2).map(stripUrls).filter(Boolean).join("; ")
+    : stripUrls(productName);
 
   // Narrator context
   const genderHint = narrator.sex === "female" ? "narradora mulher" : "narrador homem";
   const childrenHint = narrator.hasChildren ? "tem filhos" : "";
   const narratorContext = [genderHint, childrenHint].filter(Boolean).join(", ");
+  // Voice hint appended after narrator line (descritivo, nunca instrução)
+  const narratorLine = hintText
+    ? `Narrador: ${narratorContext}\n${hintText}`
+    : `Narrador: ${narratorContext}`;
 
   const examplesBlock = examples
     .map((ex, i) => `=== EXEMPLO ${i + 1} ===\n${ex}`)
     .join("\n\n");
 
-  const user = `Leia os exemplos abaixo e aprenda o estilo. Depois escreva uma história completamente diferente.
+  const situacaoLine = incidentSeed
+    ? `Acontecimento central desta história: ${incidentSeed}
+
+Este acontecimento realmente aconteceu dentro da narrativa.
+Não substitua por outro conflito.
+Conte como ele foi descoberto, o que as pessoas fizeram e o que aconteceu depois.
+Você é livre para decidir quando revelar tudo e como organizar os posts.`
+    : `Situação: alguém próximo fez algo grave contra a narradora — traiu, mentiu, humilhou, expôs, sabotou, abandonou, fingiu.`;
+
+  const user = `Leia os exemplos e aprenda o ritmo. Depois escreva algo completamente diferente.
 
 ${examplesBlock}
 
 ---
 
-Agora escreva UMA história nova sobre este produto:
-${productContext}
-NARRADORA: ${narratorContext}
+${situacaoLine}
+Contexto em que o produto aparece: ${situationContext}
+${narratorLine}
 
-A história deve ser sobre uma situação concreta que aconteceu, envolvendo outra pessoa (familiar, amigo, parceiro, colega).
-O narrador nunca avalia nem elogia o produto. O produto simplesmente aparece — quem elogia, se alguém elogia, é outra pessoa.
-O último post SEMPRE termina com uma pergunta pro leitor ("Vocês fariam o quê?", "Vocês aceitariam?", "Vocês teriam falado algo?").
-Use [LINK] onde o produto aparece. Nunca escreva URLs, domínios ou endereços. Só a palavra [LINK].
-Não copie os exemplos. Escreva uma situação completamente diferente.
+Posts 1 até o penúltimo: só acontecimentos e falas. Sem mencionar o produto.
+Último post: crie uma cena de vida real onde o produto faz sentido aparecer depois do que aconteceu. Use o contexto (${situationContext}) para decidir QUAL cena seria essa. Nessa cena, outro personagem manda ou traz "isso aqui [LINK]" — nunca o narrador recomendando.
+CERTO: "Minha mãe veio me ajudar a reorganizar o apartamento depois que ele saiu. Trouxe isso aqui [LINK]"
+CERTO: "Dias depois minha prima me mandou isso aqui [LINK] dizendo que tinha comprado pra mim quando me viu assim"
+ERRADO: "meu irmão me mandou isso aqui para me ajudar a superar" (vago, sem cena de vida real)
+Pergunta final: específica da situação. CERTO: "Eu fui sincera demais?" ERRADO: "Você também já passou por isso?"
+[LINK] = exatamente esses 6 caracteres. Não escreva URL. Não invente domínio.
+Não copie os exemplos.
 
 Responda APENAS com JSON válido:
 {"posts": [{"position": 1, "content": "..."}, {"position": 2, "content": "..."}]}`;
 
-  const text = await callLLM(system, user, config, 1400, ctx, "geração");
+  const text = await callLLM(system, user, config, 1400, ctx, "geração", 0, seed);
 
   let rawPosts: StoryPost[];
   try {
     const parsed = extractJson<{ posts: StoryPost[] }>(text);
     rawPosts = (parsed.posts ?? []).filter(p => p.content?.trim());
     if (rawPosts.length === 0) throw new Error("Nenhum post gerado.");
-    rawPosts = rawPosts.slice(0, 7);
+    rawPosts = rawPosts.slice(0, 5);
   } catch {
     throw new Error(`Falha ao parsear posts: ${text.slice(0, 200)}`);
+  }
+
+  // ── Incident validation and retry ─────────────────────────────────────────
+  let incidentFollowed = !incidentSeed;
+  let retryTriggered = false;
+
+  if (incidentSeed) {
+    incidentFollowed = validateIncidentFollowed(rawPosts, incidentSeed);
+    if (!incidentFollowed) {
+      retryTriggered = true;
+      const retryUser = user + "\n\nA resposta anterior ignorou o acontecimento central. Refaça usando obrigatoriamente o incidente informado, sem mudar o estilo.";
+      try {
+        const retryText = await callLLM(system, retryUser, config, 1400, ctx, "retry-incident", 0, seed);
+        const retryParsed = extractJson<{ posts: StoryPost[] }>(retryText);
+        const retryPosts = (retryParsed.posts ?? []).filter(p => p.content?.trim()).slice(0, 5);
+        if (retryPosts.length > 0) {
+          rawPosts = retryPosts;
+          incidentFollowed = validateIncidentFollowed(rawPosts, incidentSeed);
+        }
+      } catch {
+        // Retry failed — use original rawPosts as fallback
+      }
+    }
   }
 
   const posts = withLink ? resolveProductLink(rawPosts, productUrl, seed) : rawPosts;
@@ -466,6 +548,21 @@ Responda APENAS com JSON válido:
   // Minimal stub for narrative-engine.ts compatibility
   const firstPostContent = posts[0]?.content ?? "";
   const conflictStub = CONFLICT_BANK[seed % CONFLICT_BANK.length];
+
+  const voiceExperimentDebug: VoiceExperimentData | undefined = voiceExperiment
+    ? {
+        mode: "exploration",
+        dimension: "tone",
+        value: toneValue,
+        selected: true,
+        applied: hintText !== null,
+        hintText,
+        ragExampleIndices,
+        seed,
+        seedSentToApi,
+        promptVersion: "voice-v0",
+      }
+    : undefined;
 
   const debug: StoryDebugData = {
     kind: "story",
@@ -478,6 +575,8 @@ Responda APENAS com JSON válido:
     durationMs: Date.now() - start,
     provider: config.provider,
     model,
+    voiceExperiment: voiceExperimentDebug,
+    ...(incidentSeed !== undefined ? { incidentFollowed, retryTriggered } : {}),
   };
 
   return {

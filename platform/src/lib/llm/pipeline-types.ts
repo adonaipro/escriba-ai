@@ -119,6 +119,52 @@ export interface StoryScore {
   issues: string[];
 }
 
+// ─── Voice Experiment V0 (tone only) ─────────────────────────────────────────
+
+export type VoiceToneValue = "control" | "leve" | "direta" | "emocional";
+
+export interface VoiceToneExperiment {
+  dimension: "tone";
+  value: VoiceToneValue;
+}
+
+export interface VoiceExperimentData {
+  mode: "exploration" | "production";
+  dimension: "tone";
+  value: VoiceToneValue;
+  selected: boolean;
+  applied: boolean;
+  hintText: string | null;
+  ragExampleIndices: number[];
+  seed: number;
+  seedSentToApi: boolean;
+  promptVersion: string;
+}
+
+// ─── Incident Experiment V1 (Drama Engine) ───────────────────────────────────
+
+export interface IncidentCandidate {
+  incident: string;
+  curiosityScore: number;
+  storyDepth: number;
+  productFit: number;
+  totalScore: number;
+}
+
+export interface IncidentExperimentData {
+  enabled: boolean;
+  candidates: IncidentCandidate[];
+  selectedIncident: string;
+  rejectedIncidents: string[];
+  curiosityScore: number;
+  productFit: number;
+  storyDepth: number;
+  totalScore: number;
+  incidentInjected: boolean;
+  incidentFollowed: boolean;
+  retryTriggered: boolean;
+}
+
 export interface StoryDebugData {
   kind: "story";
   withLink: boolean;
@@ -130,4 +176,9 @@ export interface StoryDebugData {
   durationMs: number;
   provider: string;
   model: string;
+  voiceExperiment?: VoiceExperimentData;
+  incidentExperiment?: IncidentExperimentData;
+  // Carried from story-engine → read by narrative-engine to populate incidentExperiment
+  incidentFollowed?: boolean;
+  retryTriggered?: boolean;
 }

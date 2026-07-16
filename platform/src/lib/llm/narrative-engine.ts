@@ -24,8 +24,9 @@ import {
 import { buildNarrativeBriefing } from "./narrative-director";
 import { writeNarrative } from "./narrative-writer";
 import type { LlmProviderConfig } from "./types";
-import type { PipelineNarratorData } from "./pipeline-types";
+import type { PipelineNarratorData, VoiceToneExperiment } from "./pipeline-types";
 import { runStoryEngine, type StoryDebugData } from "./story-engine";
+import { generateBestIncident } from "./incident-engine";
 
 export type { StoryDebugData };
 
@@ -860,6 +861,7 @@ export async function buildNarrativeLLM(
     hasChildren: boolean;
     livesAlone: boolean;
   },
+  voiceExperiment?: VoiceToneExperiment,
 ): Promise<BuiltNarrative & { pipelineDebug?: StoryDebugData }> {
   if (!llmConfig) {
     return {
@@ -894,6 +896,8 @@ export async function buildNarrativeLLM(
     expressionStyle: personality.expressionStyle,
   };
 
+  const incidentResult = await generateBestIncident(universe, productName, seed, llmConfig);
+
   const storyResult = await runStoryEngine(
     universe,
     productName,
@@ -901,7 +905,22 @@ export async function buildNarrativeLLM(
     narratorFull,
     seed,
     llmConfig,
+    true,
+    voiceExperiment,
+    incidentResult?.selectedIncident,
   );
+
+  const mergedDebug: StoryDebugData = incidentResult
+    ? {
+        ...storyResult.debug,
+        incidentExperiment: {
+          ...incidentResult.debug,
+          incidentInjected: true,
+          incidentFollowed: storyResult.debug.incidentFollowed ?? false,
+          retryTriggered: storyResult.debug.retryTriggered ?? false,
+        },
+      }
+    : storyResult.debug;
 
   const llmPosts = storyResult.posts.map(p => ({
     position: p.position,
@@ -937,6 +956,6 @@ export async function buildNarrativeLLM(
     openingStyle:     "conflito-humano",
     questionType:     "moral",
     posts:            llmPosts,
-    pipelineDebug:    storyResult.debug,
+    pipelineDebug:    mergedDebug,
   };
 }

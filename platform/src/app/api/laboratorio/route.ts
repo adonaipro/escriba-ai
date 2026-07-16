@@ -12,6 +12,7 @@ import {
   type StoredProductAnalysis,
   type StoryDebugData,
 } from "@/lib/llm/narrative-engine";
+import type { VoiceToneExperiment, VoiceToneValue } from "@/lib/llm/pipeline-types";
 import type { LlmProviderConfig } from "@/lib/llm/types";
 import { computeSimilarityMatrix, type BatchNarrative } from "@/lib/llm/narrative-batch";
 import { validateCoherence } from "@/lib/products/coherence-validator";
@@ -169,6 +170,7 @@ async function generateOneLLM(
   strategy?: ProductStrategy,
   seed?: number,
   storedAnalysis?: StoredProductAnalysis,
+  voiceExperiment?: VoiceToneExperiment,
 ): Promise<LabNarrative> {
   const s = seed ?? Date.now();
   const filter = buildFilter(narrator);
@@ -181,7 +183,7 @@ async function generateOneLLM(
     livesAlone:    narrator.livesAlone,
   };
   const built = await buildNarrativeLLM(
-    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData,
+    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment,
   );
   return {
     ...built,
@@ -285,12 +287,12 @@ export async function POST(req: NextRequest) {
   const profileId = session.user.profile.id;
 
   const body = (await req.json()) as {
-    mode: "single" | "benchmark" | "compare" | "strategy";
+    mode: "single" | "benchmark" | "compare" | "strategy" | "exploration";
     narratorId?: string;
     narratorIds?: string[];
     productName?: string;
     productUrl?: string;
-    productId?: string;   // NEW: use stored product analysis
+    productId?: string;
     count?: number;
   };
 
@@ -418,6 +420,46 @@ export async function POST(req: NextRequest) {
         entityExplanation: buildEntityExplanation(narrator, narratives[0], "comparar estratégias de inserção de produto", productInfo),
       });
     }
+    // ── EXPLORATION ──────────────────────────────────────────────────────────
+    if (mode === "exploration") {
+      if (!llmConfig) {
+        return NextResponse.json({ error: "Modo exploração requer LLM configurado" }, { status: 400 });
+      }
+      const narrator = await fetchNarrator(body.narratorId ?? "", profileId);
+      if (!narrator) return NextResponse.json({ error: "Narrador não encontrado" }, { status: 404 });
+
+      const seed = Date.now();
+      const toneValues: VoiceToneValue[] = ["control", "leve", "direta", "emocional"];
+
+      let narratives: LabNarrative[];
+      // Groq: sequential to avoid rate limits; others: parallel
+      if (llmConfig.provider === "groq") {
+        narratives = [];
+        for (const toneValue of toneValues) {
+          const experiment: VoiceToneExperiment = { dimension: "tone", value: toneValue };
+          narratives.push(
+            await generateOneLLM(narrator, productName, productUrl, llmConfig, undefined, seed, storedAnalysis, experiment)
+              .then(n => ({ ...n, id: `lab-exploration-${toneValue}` })),
+          );
+        }
+      } else {
+        narratives = await Promise.all(
+          toneValues.map(toneValue => {
+            const experiment: VoiceToneExperiment = { dimension: "tone", value: toneValue };
+            return generateOneLLM(narrator, productName, productUrl, llmConfig, undefined, seed, storedAnalysis, experiment)
+              .then(n => ({ ...n, id: `lab-exploration-${toneValue}` }));
+          }),
+        );
+      }
+
+      return NextResponse.json({
+        narratives,
+        isLLM: true,
+        experimentSeed: seed,
+        entityExplanation: buildEntityExplanation(narrator, narratives[0], "comparar variantes de voz — tone V0", productInfo),
+      });
+    }
+
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[Laboratorio] LLM error:", message);
