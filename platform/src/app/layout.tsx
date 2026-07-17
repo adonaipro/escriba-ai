@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Grok Platform",
+  title: "Escriba IA",
   description: "Plataforma de automação inteligente para afiliados",
 };
 
@@ -27,7 +27,7 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} dark`}
     >
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+      <body className="min-h-screen bg-[#090909] text-zinc-100 antialiased">
         {children}
       </body>
     </html>

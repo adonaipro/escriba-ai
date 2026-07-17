@@ -80,21 +80,6 @@ export default async function IntegracoesPage() {
         </p>
       </div>
 
-      {/* Simulated notice */}
-      <div className="rounded-xl border border-amber-800/50 bg-amber-950/30 p-4">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-amber-400">Modo de desenvolvimento</p>
-            <p className="text-xs text-amber-500 mt-0.5">
-              Todas as integrações marcadas como <strong>[SIMULADO]</strong> operam com
-              dados mock. Nenhuma publicação ou transação real é realizada. OAuth e chaves
-              de API reais serão necessários na versão de produção.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Connected accounts list */}
       {socialAccounts.length > 0 && (
         <div>
@@ -115,7 +100,6 @@ export default async function IntegracoesPage() {
                             <h3 className="font-medium text-zinc-100">
                               @{account.username}
                             </h3>
-                            <Badge variant="warning" className="text-xs">SIMULADO</Badge>
                             <Badge variant="secondary" className="text-xs capitalize">
                               {account.network}
                             </Badge>
@@ -216,9 +200,6 @@ export default async function IntegracoesPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-medium text-zinc-100">{mp.name}</h3>
-                          {mp.mock && (
-                            <Badge variant="warning" className="text-xs">SIMULADO</Badge>
-                          )}
                           {!mp.available && (
                             <Badge variant="outline" className="text-xs">Desabilitado</Badge>
                           )}

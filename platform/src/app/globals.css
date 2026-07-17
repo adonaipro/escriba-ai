@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
+  --background: #090909;
   --foreground: #fafafa;
+  --sidebar-bg: #0D0D0D;
+  --card-bg: #121212;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --brand-gradient: linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F97316 100%);
 }
 
 @theme inline {

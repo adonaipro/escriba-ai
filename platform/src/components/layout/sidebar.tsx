@@ -9,7 +9,6 @@ import {
   Plug,
   CreditCard,
   Settings,
-  Zap,
   CalendarDays,
   Library,
   Users,
@@ -52,17 +51,14 @@ export function Sidebar({ accounts, selectedAccountId }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-zinc-800 bg-zinc-950">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-[var(--border-subtle)] bg-[var(--sidebar-bg)]">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2 border-b border-zinc-800 px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600">
-          <Zap className="h-4 w-4 text-white" />
-        </div>
-        <span className="text-sm font-semibold text-zinc-100">Grok Platform</span>
+      <div className="flex h-14 items-center border-b border-[var(--border-subtle)] px-5">
+        <img src="/logo-horizontal.png" alt="Escriba IA" className="h-9 w-auto" />
       </div>
 
       {/* Account selector */}
-      <div className="border-b border-zinc-800 px-3 py-2">
+      <div className="border-b border-[var(--border-subtle)] px-3 py-2">
         <AccountSelector accounts={accounts} selectedAccountId={selectedAccountId} />
       </div>
 
@@ -81,9 +77,10 @@ export function Sidebar({ accounts, selectedAccountId }: SidebarProps) {
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                     isActive
-                      ? "bg-violet-600/10 text-violet-400"
-                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                      ? "text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
                   )}
+                  style={isActive ? { background: "var(--brand-gradient)" } : undefined}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
                   {item.label}
@@ -94,13 +91,6 @@ export function Sidebar({ accounts, selectedAccountId }: SidebarProps) {
         </ul>
       </nav>
 
-      {/* Simulated indicator */}
-      <div className="border-t border-zinc-800 px-4 py-3">
-        <div className="flex items-center gap-2 rounded-lg bg-amber-950/30 border border-amber-800/50 px-3 py-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
-          <span className="text-xs text-amber-400">Modo simulado</span>
-        </div>
-      </div>
     </aside>
   );
 }

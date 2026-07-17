@@ -161,7 +161,7 @@ export function ConnectAccountForm({ narrators }: Props) {
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                Conectar conta [SIMULADO]
+                Conectar conta
               </>
             )}
           </Button>

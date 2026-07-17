@@ -999,14 +999,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
     </div>
   );
 
-  // ── Sandbox notice ──────────────────────────────────────────────────────
-  const SandboxNotice = (
-    <div className="flex items-center gap-2 rounded-lg border border-amber-800/30 bg-amber-950/10 px-3 py-2 text-xs text-amber-400">
-      <FlaskConical className="h-3.5 w-3.5 shrink-0" />
-      Nada gerado aqui afeta campanhas, métricas ou a base de conhecimento da IA.
-    </div>
-  );
-
   return (
     <>
       {promoteData && (
@@ -1027,7 +1019,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
               <h1 className="text-lg font-semibold text-zinc-100">Laboratório Narrativo</h1>
             </div>
             <p className="text-sm text-zinc-500">
-              Ambiente sandbox para testar, comparar e explorar narrativas sem afetar o sistema de aprendizado.
+              Teste, compare e explore narrativas antes de usar em campanhas.
             </p>
           </div>
 
@@ -1056,7 +1048,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Testar Narrador ─────────────────────────────── */}
           {section === "testar" && (
             <div className="space-y-4">
-              {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {NarratorSelect}
 
@@ -1142,7 +1133,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Benchmark ──────────────────────────────────── */}
           {section === "benchmark" && (
             <div className="space-y-4">
-              {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {NarratorSelect}
                 {ProductSelectorComponent}
@@ -1223,7 +1213,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Comparar Narradores ────────────────────────── */}
           {section === "comparar" && (
             <div className="space-y-4">
-              {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {ProductSelectorComponent}
                 <div>
@@ -1293,7 +1282,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Testar Estratégias ─────────────────────────── */}
           {section === "estrategias" && (
             <div className="space-y-4">
-              {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {NarratorSelect}
                 {ProductSelectorComponent}
@@ -1335,7 +1323,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Explorar Voz ───────────────────────────────── */}
           {section === "exploracao" && (
             <div className="space-y-4">
-              {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
                 <p className="text-xs text-zinc-500">
                   Gera 4 histórias com a mesma narradora, produto, seed e exemplos RAG. Muda apenas uma linha de voz.

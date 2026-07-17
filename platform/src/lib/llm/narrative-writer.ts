@@ -302,7 +302,7 @@ async function callOpenRouter(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
-      "HTTP-Referer": "https://grok.mtxcapital.com.br",
+      "HTTP-Referer": "https://escribaia.com.br",
     },
     body: JSON.stringify({
       model,
