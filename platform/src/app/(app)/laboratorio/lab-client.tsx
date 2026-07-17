@@ -853,6 +853,9 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
   type ContentMode = "story-produto" | "story-organico" | "desabafo" | "polemica" | "pergunta";
   const [contentMode, setContentMode] = useState<ContentMode>("story-produto");
 
+  // Custom theme
+  const [customTheme, setCustomTheme] = useState("");
+
   // Per-section narrator selects
   const [narratorId, setNarratorId] = useState(narrators[0]?.id ?? "");
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -895,6 +898,11 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           : { productName: tempProductName, productUrl: tempProductUrl })
         : {};
       const body: Record<string, unknown> = { mode, contentMode, ...productBody };
+
+      const trimmedTheme = customTheme.trim();
+      if (trimmedTheme && (contentMode === "story-produto" || contentMode === "story-organico")) {
+        body.customTheme = trimmedTheme;
+      }
 
       if (mode === "single")      { body.narratorId = narratorId; body.count = count; }
       if (mode === "benchmark")   { body.narratorId = narratorId; body.count = benchmarkCount; }
@@ -1086,6 +1094,24 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 )}
                 {(contentMode === "desabafo" || contentMode === "polemica" || contentMode === "pergunta") && (
                   <p className="text-xs text-zinc-500">Post único — sem produto, sem link.</p>
+                )}
+
+                {(contentMode === "story-produto" || contentMode === "story-organico") && (
+                  <div>
+                    <label className="text-xs font-medium text-zinc-400 block mb-1">
+                      Tema customizado <span className="text-zinc-600">(opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={customTheme}
+                      onChange={(e) => setCustomTheme(e.target.value)}
+                      placeholder="Ex: Crie histórias sobre gatos abandonados"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                    <p className="text-[10px] text-zinc-600 mt-1">
+                      Deixe em branco para usar o tema padrão (traição, fofoca, família).
+                    </p>
+                  </div>
                 )}
 
                 <div>

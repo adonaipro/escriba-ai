@@ -476,6 +476,7 @@ export async function runStoryEngine(
   withLink = true,
   voiceExperiment?: VoiceToneExperiment,
   incidentSeed?: string,
+  customTheme?: string,
 ): Promise<StoryResult> {
   const start = Date.now();
   const model = config.model ?? resolveDefaultModel(config);
@@ -490,11 +491,16 @@ export async function runStoryEngine(
   const hintText = experimentActive ? (TONE_HINTS[toneValue] ?? null) : null;
   const seedSentToApi = config.provider !== "anthropic";
 
+  const themeBlock = customTheme
+    ? `Estas histórias seguem o tema especificado: ${customTheme}.
+Escreva histórias que envolvam esse tema, mantendo a estrutura dramática com tensão real, confronto ou descoberta, e emoção genuína.`
+    : `Estas histórias são sobre fofoca: traição, mentira, humilhação, sabotagem, exposição, abandono, inveja, segredos destruidores.
+Alguém próximo fez algo grave. A narradora descobre, confronta ou é confrontada — o drama acontece dentro da história, não é só relatado.
+Nunca escreva sobre: jantares, receitas, visitas sem conflito, compras, situações cotidianas sem traição grave.`;
+
   const system = `Escreva como alguém mandando uma sequência de mensagens para um amigo contando o que aconteceu.
 
-Estas histórias são sobre fofoca: traição, mentira, humilhação, sabotagem, exposição, abandono, inveja, segredos destruidores.
-Alguém próximo fez algo grave. A narradora descobre, confronta ou é confrontada — o drama acontece dentro da história, não é só relatado.
-Nunca escreva sobre: jantares, receitas, visitas sem conflito, compras, situações cotidianas sem traição grave.
+${themeBlock}
 
 Regras de escrita:
 - construa tensão em cada post — o leitor deve querer saber o que vem depois

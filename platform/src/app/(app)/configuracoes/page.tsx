@@ -1,14 +1,12 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { Settings, User, Bell, Shield } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { LlmConfigSection } from "./llm-config-section";
+import { ProfileSection } from "./profile-section";
 
 export default async function ConfiguracoesPage() {
   const session = await getSession();
@@ -31,52 +29,18 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
 
-      {/* Profile section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-zinc-400" />
-            <CardTitle className="text-base">Perfil</CardTitle>
-          </div>
-          <CardDescription>Informações da sua conta</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input defaultValue={user.name || ""} disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>E-mail</Label>
-              <Input defaultValue={user.email} disabled />
-            </div>
-          </div>
-          {profile && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nicho</Label>
-                <Input defaultValue={profile.niche} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label>Estado do perfil</Label>
-                <div className="flex items-center gap-2 h-9">
-                  <Badge variant="success">{profile.state}</Badge>
-                </div>
-              </div>
-            </div>
-          )}
-          <p className="text-xs text-zinc-500">
-            Edição de perfil estará disponível em breve.
-          </p>
-        </CardContent>
-      </Card>
+      <ProfileSection
+        userName={user.name || ""}
+        userEmail={user.email}
+        userNiche={profile.niche}
+      />
 
       <Separator />
 
       {/* LLM config — client component */}
       <LlmConfigSection
         initialConfig={{
-          provider: llmConfig?.provider ?? "simulated",
+          provider: llmConfig?.provider ?? "groq",
           model: llmConfig?.model ?? "",
           baseUrl: llmConfig?.baseUrl ?? "",
         }}
@@ -110,32 +74,6 @@ export default async function ConfiguracoesPage() {
           ))}
           <p className="text-xs text-zinc-500">
             Notificações reais (e-mail, push) disponíveis em produção.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Security */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-zinc-400" />
-            <CardTitle className="text-base">Segurança</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Alterar senha</Label>
-            <div className="space-y-2">
-              <Input type="password" placeholder="Senha atual" disabled />
-              <Input type="password" placeholder="Nova senha" disabled />
-              <Input type="password" placeholder="Confirmar nova senha" disabled />
-            </div>
-          </div>
-          <Button variant="outline" disabled>Atualizar senha</Button>
-          <p className="text-xs text-zinc-500">
-            Alteração de senha disponível em breve.
           </p>
         </CardContent>
       </Card>

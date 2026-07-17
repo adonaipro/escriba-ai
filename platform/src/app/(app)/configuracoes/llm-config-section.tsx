@@ -21,8 +21,13 @@ type LlmConfigData = {
   baseUrl: string;
 };
 
+const VISIBLE_PROVIDERS = Object.entries(PROVIDER_META).filter(([key]) => key !== "simulated");
+
 export function LlmConfigSection({ initialConfig }: { initialConfig: LlmConfigData }) {
-  const [provider, setProvider] = useState(initialConfig.provider || "simulated");
+  const defaultProvider = initialConfig.provider && initialConfig.provider !== "simulated"
+    ? initialConfig.provider
+    : "groq";
+  const [provider, setProvider] = useState(defaultProvider);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialConfig.model || "");
   const [baseUrl, setBaseUrl] = useState(initialConfig.baseUrl || "");
@@ -31,8 +36,7 @@ export function LlmConfigSection({ initialConfig }: { initialConfig: LlmConfigDa
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const meta = PROVIDER_META[provider] ?? PROVIDER_META.simulated;
-  const isSimulated = provider === "simulated";
+  const meta = PROVIDER_META[provider] ?? PROVIDER_META.groq;
 
   async function handleSave() {
     setSaving(true);
@@ -78,71 +82,71 @@ export function LlmConfigSection({ initialConfig }: { initialConfig: LlmConfigDa
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(PROVIDER_META).map(([key, m]) => (
+              {VISIBLE_PROVIDERS.map(([key, m]) => (
                 <SelectItem key={key} value={key}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {meta.helpUrl && (
+            <p className="text-xs text-zinc-500">
+              Não tem chave?{" "}
+              <a
+                href={meta.helpUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-violet-400 hover:text-violet-300 underline underline-offset-2"
+              >
+                Obtenha gratuitamente em {provider === "groq" ? "console.groq.com" : provider === "openrouter" ? "openrouter.ai" : ""}
+              </a>
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>API Key</Label>
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              placeholder={`${meta.placeholder || "Sua API key"} (deixe em branco para manter a atual)`}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+            >
+              {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-zinc-500">
+            A chave é armazenada com segurança no servidor. Não é exibida após salvar.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Modelo</Label>
+          <Select value={model} onValueChange={setModel}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o modelo" />
+            </SelectTrigger>
+            <SelectContent>
+              {meta.models.map((m) => (
+                <SelectItem key={m} value={m}>{m}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {!isSimulated && (
-          <>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <div className="relative">
-                <Input
-                  type={showKey ? "text" : "password"}
-                  placeholder={`${meta.placeholder || "Sua API key"} (deixe em branco para manter a atual)`}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-xs text-zinc-500">
-                A chave é armazenada no servidor. Não é exibida após salvar.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Modelo</Label>
-              <Select value={model} onValueChange={setModel}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o modelo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {meta.models.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {(provider === "openrouter" || provider === "openai") && (
-              <div className="space-y-2">
-                <Label>Base URL (opcional)</Label>
-                <Input
-                  placeholder={provider === "openai" ? "https://api.openai.com/v1" : "https://openrouter.ai/api/v1"}
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        {isSimulated && (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-            <p className="text-xs text-zinc-400">
-              O motor narrativo interno gera histórias usando templates avançados em português do Brasil.
-              Para habilitar geração com LLM real, selecione um provedor acima e insira sua API key.
-            </p>
+        {(provider === "openrouter" || provider === "openai") && (
+          <div className="space-y-2">
+            <Label>Base URL (opcional)</Label>
+            <Input
+              placeholder={provider === "openai" ? "https://api.openai.com/v1" : "https://openrouter.ai/api/v1"}
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
           </div>
         )}
 

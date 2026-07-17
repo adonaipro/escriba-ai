@@ -865,6 +865,7 @@ export async function buildNarrativeLLM(
   },
   voiceExperiment?: VoiceToneExperiment,
   contentMode?: ContentMode,
+  customTheme?: string,
 ): Promise<BuiltNarrative & { pipelineDebug?: StoryDebugData }> {
   // ── Single-post content modes (desabafo / polemica / pergunta) ───────────────
   if (contentMode && contentMode !== "story-produto" && contentMode !== "story-organico") {
@@ -943,6 +944,7 @@ export async function buildNarrativeLLM(
     withLink,
     voiceExperiment,
     incidentResult?.selectedIncident,
+    customTheme,
   );
 
   const mergedDebug: StoryDebugData = incidentResult

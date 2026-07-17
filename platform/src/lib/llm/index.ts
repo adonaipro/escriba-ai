@@ -22,16 +22,29 @@ export function getLlmProvider(config?: LlmProviderConfig | null): LlmProvider {
       return new AnthropicProvider(config);
     case "openrouter":
       return new OpenRouterProvider(config);
+    case "groq":
+      return new OpenAIProvider({
+        ...config,
+        baseUrl: config.baseUrl || "https://api.groq.com/openai/v1",
+        model: config.model || "llama-3.3-70b-versatile",
+      });
     default:
       return new SimulatedProvider();
   }
 }
 
-export const PROVIDER_META: Record<string, { label: string; models: string[]; placeholder: string }> = {
-  simulated: {
-    label: "Simulado (gratuito)",
-    models: ["simulated"],
-    placeholder: "",
+export const PROVIDER_META: Record<string, { label: string; models: string[]; placeholder: string; recommended?: boolean; helpUrl?: string }> = {
+  groq: {
+    label: "Groq — Llama 3.3 70B (Recomendado · Gratuito)",
+    models: [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-70b-versatile",
+      "llama3-70b-8192",
+      "mixtral-8x7b-32768",
+    ],
+    placeholder: "gsk_...",
+    recommended: true,
+    helpUrl: "https://console.groq.com/keys",
   },
   openai: {
     label: "OpenAI",
@@ -52,15 +65,6 @@ export const PROVIDER_META: Record<string, { label: string; models: string[]; pl
       "mistralai/mistral-7b-instruct:free",
     ],
     placeholder: "sk-or-...",
-  },
-  groq: {
-    label: "Groq (gratuito)",
-    models: [
-      "llama-3.3-70b-versatile",
-      "llama-3.1-70b-versatile",
-      "llama3-70b-8192",
-      "mixtral-8x7b-32768",
-    ],
-    placeholder: "gsk_...",
+    helpUrl: "https://openrouter.ai/keys",
   },
 };

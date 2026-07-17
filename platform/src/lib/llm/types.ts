@@ -32,6 +32,7 @@ export interface NarrativeInput {
   learnings?: string[];
   topPatterns?: Array<{ type: string; value: string; winCount: number; usageCount: number }>;
   regenerationSeed?: number;
+  customTheme?: string;
   // Narrator intelligence layer
   narrator?: NarratorContext;
   activeHypotheses?: Array<{ dimension: string; value: string }>;

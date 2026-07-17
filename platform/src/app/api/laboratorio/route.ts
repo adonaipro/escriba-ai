@@ -172,6 +172,7 @@ async function generateOneLLM(
   storedAnalysis?: StoredProductAnalysis,
   voiceExperiment?: VoiceToneExperiment,
   contentMode?: import("@/lib/llm/pipeline-types").ContentMode,
+  customTheme?: string,
 ): Promise<LabNarrative> {
   const s = seed ?? Date.now();
   const filter = buildFilter(narrator);
@@ -184,7 +185,7 @@ async function generateOneLLM(
     livesAlone:    narrator.livesAlone,
   };
   const built = await buildNarrativeLLM(
-    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment, contentMode,
+    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment, contentMode, customTheme,
   );
   return {
     ...built,
@@ -204,6 +205,7 @@ async function generateNLLM(
   baseSeed?: number,
   storedAnalysis?: StoredProductAnalysis,
   contentMode?: import("@/lib/llm/pipeline-types").ContentMode,
+  customTheme?: string,
 ): Promise<LabNarrative[]> {
   const seed = baseSeed ?? Date.now();
   const cap = Math.min(n, 5);
@@ -213,7 +215,7 @@ async function generateNLLM(
     const results: LabNarrative[] = [];
     for (let i = 0; i < cap; i++) {
       results.push(
-        await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode),
+        await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode, customTheme),
       );
     }
     return results;
@@ -221,7 +223,7 @@ async function generateNLLM(
 
   return Promise.all(
     Array.from({ length: cap }, (_, i) =>
-      generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode),
+      generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode, customTheme),
     ),
   );
 }
@@ -297,6 +299,7 @@ export async function POST(req: NextRequest) {
     productId?: string;
     count?: number;
     contentMode?: import("@/lib/llm/pipeline-types").ContentMode;
+    customTheme?: string;
   };
 
   const { mode } = body;
@@ -343,7 +346,7 @@ export async function POST(req: NextRequest) {
       if (!narrator) return NextResponse.json({ error: "Narrador não encontrado" }, { status: 404 });
       const count = Math.max(1, Math.min(body.count ?? 1, 10));
       const narratives = llmConfig
-        ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis, body.contentMode)
+        ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis, body.contentMode, body.customTheme)
         : generateN(narrator, productName, productUrl, count, undefined, undefined, storedAnalysis);
       return NextResponse.json({
         narratives,

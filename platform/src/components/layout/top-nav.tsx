@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { LogOut, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -61,9 +62,11 @@ export function TopNav({ userName, userEmail }: TopNavProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2">
-              <User className="h-4 w-4" />
-              Perfil
+            <DropdownMenuItem asChild>
+              <Link href="/configuracoes" className="flex items-center gap-2 cursor-pointer">
+                <User className="h-4 w-4" />
+                Perfil
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
