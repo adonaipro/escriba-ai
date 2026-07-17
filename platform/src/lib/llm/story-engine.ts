@@ -545,6 +545,8 @@ Este acontecimento realmente aconteceu dentro da narrativa.
 Não substitua por outro conflito.
 Conte como ele foi descoberto, o que as pessoas fizeram e o que aconteceu depois.
 Você é livre para decidir quando revelar tudo e como organizar os posts.`
+    : customTheme
+    ? `Crie uma história envolvendo: ${customTheme}. Desenvolva personagens, tensão e drama dentro desse tema.`
     : `Situação: alguém próximo fez algo grave contra a narradora — traiu, mentiu, humilhou, expôs, sabotou, abandonou, fingiu.`;
 
   const productBlock = withLink
