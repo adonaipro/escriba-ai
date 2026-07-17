@@ -171,6 +171,7 @@ async function generateOneLLM(
   seed?: number,
   storedAnalysis?: StoredProductAnalysis,
   voiceExperiment?: VoiceToneExperiment,
+  contentMode?: import("@/lib/llm/pipeline-types").ContentMode,
 ): Promise<LabNarrative> {
   const s = seed ?? Date.now();
   const filter = buildFilter(narrator);
@@ -183,7 +184,7 @@ async function generateOneLLM(
     livesAlone:    narrator.livesAlone,
   };
   const built = await buildNarrativeLLM(
-    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment,
+    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment, contentMode,
   );
   return {
     ...built,
@@ -202,6 +203,7 @@ async function generateNLLM(
   strategy?: ProductStrategy,
   baseSeed?: number,
   storedAnalysis?: StoredProductAnalysis,
+  contentMode?: import("@/lib/llm/pipeline-types").ContentMode,
 ): Promise<LabNarrative[]> {
   const seed = baseSeed ?? Date.now();
   const cap = Math.min(n, 5);
@@ -211,7 +213,7 @@ async function generateNLLM(
     const results: LabNarrative[] = [];
     for (let i = 0; i < cap; i++) {
       results.push(
-        await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis),
+        await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode),
       );
     }
     return results;
@@ -219,7 +221,7 @@ async function generateNLLM(
 
   return Promise.all(
     Array.from({ length: cap }, (_, i) =>
-      generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis),
+      generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode),
     ),
   );
 }
@@ -294,6 +296,7 @@ export async function POST(req: NextRequest) {
     productUrl?: string;
     productId?: string;
     count?: number;
+    contentMode?: import("@/lib/llm/pipeline-types").ContentMode;
   };
 
   const { mode } = body;
@@ -324,7 +327,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!productName.trim() && !productUrl.trim()) {
+  const requiresProduct = !body.contentMode || body.contentMode === "story-produto";
+  if (requiresProduct && !productName.trim() && !productUrl.trim()) {
     return NextResponse.json({ error: "Produto não informado" }, { status: 400 });
   }
 
@@ -339,7 +343,7 @@ export async function POST(req: NextRequest) {
       if (!narrator) return NextResponse.json({ error: "Narrador não encontrado" }, { status: 404 });
       const count = Math.max(1, Math.min(body.count ?? 1, 10));
       const narratives = llmConfig
-        ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis)
+        ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis, body.contentMode)
         : generateN(narrator, productName, productUrl, count, undefined, undefined, storedAnalysis);
       return NextResponse.json({
         narratives,

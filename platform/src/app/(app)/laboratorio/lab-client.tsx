@@ -849,6 +849,10 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
     ? (products.find((p) => p.id === selectedProductId)?.affiliateUrl ?? "")
     : tempProductUrl;
 
+  // Content mode
+  type ContentMode = "story-produto" | "story-organico" | "desabafo" | "polemica" | "pergunta";
+  const [contentMode, setContentMode] = useState<ContentMode>("story-produto");
+
   // Per-section narrator selects
   const [narratorId, setNarratorId] = useState(narrators[0]?.id ?? "");
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -868,24 +872,29 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
   }
 
   async function generate(mode: string) {
-    const hasProduct = productMode === "select"
-      ? !!selectedProductId
-      : (tempProductName.trim() && tempProductUrl.trim());
-
-    if (!hasProduct) {
-      setError(productMode === "select"
-        ? "Selecione um produto do catálogo ou mude para modo temporário."
-        : "Preencha o nome e URL do produto antes de gerar."
-      );
-      return;
+    const requiresProduct = contentMode === "story-produto";
+    if (requiresProduct) {
+      const hasProduct = productMode === "select"
+        ? !!selectedProductId
+        : (tempProductName.trim() && tempProductUrl.trim());
+      if (!hasProduct) {
+        setError(productMode === "select"
+          ? "Selecione um produto do catálogo ou mude para modo temporário."
+          : "Preencha o nome e URL do produto antes de gerar."
+        );
+        return;
+      }
     }
     setLoading(true);
     setResult(null);
     setError(null);
     try {
-      const body: Record<string, unknown> = productMode === "select"
-        ? { mode, productId: selectedProductId }
-        : { mode, productName: tempProductName, productUrl: tempProductUrl };
+      const productBody = contentMode === "story-produto"
+        ? (productMode === "select"
+          ? { productId: selectedProductId }
+          : { productName: tempProductName, productUrl: tempProductUrl })
+        : {};
+      const body: Record<string, unknown> = { mode, contentMode, ...productBody };
 
       if (mode === "single")      { body.narratorId = narratorId; body.count = count; }
       if (mode === "benchmark")   { body.narratorId = narratorId; body.count = benchmarkCount; }
@@ -1050,7 +1059,44 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
               {SandboxNotice}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {NarratorSelect}
-                {ProductSelectorComponent}
+
+                {/* ── Content Mode ──────────────────────────────────────── */}
+                <div>
+                  <label className="text-xs font-medium text-zinc-400 block mb-2">Tipo de conteúdo</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        { value: "story-produto",  label: "Story + Produto" },
+                        { value: "story-organico", label: "Story Orgânico" },
+                        { value: "desabafo",       label: "Desabafo" },
+                        { value: "polemica",       label: "Polêmica" },
+                        { value: "pergunta",       label: "Pergunta" },
+                      ] as { value: ContentMode; label: string }[]
+                    ).map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setContentMode(opt.value)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                          contentMode === opt.value
+                            ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                            : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {contentMode === "story-produto" && ProductSelectorComponent}
+                {contentMode === "story-organico" && (
+                  <p className="text-xs text-zinc-500">História sem link — drama orgânico, sem produto necessário. Engajamento puro.</p>
+                )}
+                {(contentMode === "desabafo" || contentMode === "polemica" || contentMode === "pergunta") && (
+                  <p className="text-xs text-zinc-500">Post único — sem produto, sem link.</p>
+                )}
+
                 <div>
                   <label className="text-xs font-medium text-zinc-400 block mb-1">Quantidade</label>
                   <div className="flex gap-2">

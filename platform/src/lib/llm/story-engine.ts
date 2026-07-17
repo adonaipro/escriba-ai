@@ -65,97 +65,151 @@ export interface StoryResult {
 
 // ─── RAG Examples ─────────────────────────────────────────────────────────────
 //
-// 8 high-quality example threads demonstrating the target style.
+// 9 high-quality example threads demonstrating the target style.
 // Model learns rhythm, naturalness, dialogue proportion, link placement.
 // These teach by example — no rules needed.
+// Diversity: romantic betrayal, mother-in-law sabotage, sexual harassment by family,
+// neighbor reputation attack, family exposure, friend career sabotage,
+// digital exposure by ex, inheritance fraud by sister, friend disbelief after harassment.
 
 // Real competitor stories — transcribed from public Threads posts.
 // URLs replaced with [LINK] placeholder.
 // These teach style, rhythm, and product placement by example.
 const STORY_EXAMPLES = [
   `Post 1:
-Descobri que minha melhor amiga ficou com meu namorado quando vi uma foto deles juntos no Instagram. Deletei o app. Abri de novo. Ainda estava lá. Fui até o apartamento dela sem avisar.
+Descobri que minha melhor amiga ficou com meu namorado quando vi uma foto deles juntos no Instagram. Era uma foto num bar que eu conheço, os dois sorrindo, ela com a mão no ombro dele. Deletei o app na hora. Respirei. Abri de novo. A foto ainda estava lá. Fiquei olhando por uns dois minutos sem conseguir entender o que estava vendo. Depois peguei as chaves e fui até o apartamento dela sem avisar.
 
 Post 2:
-Ela abriu a porta e já sabia que eu sabia. Perguntei direto: "O que foi aquilo?" Ela ficou me olhando. Depois disse: "A gente vai conversar?" Eu disse: "Não. Eu só vim buscar minhas coisas." Peguei a sacola e fui embora. Ela ficou falando no corredor.
+Ela abriu a porta e soube na hora que eu tinha visto. A expressão dela disse tudo antes de qualquer palavra. Perguntei direto: "O que foi aquilo?" Ela cruzou os braços e disse: "A gente vai sentar e conversar?" Eu disse: "Não. Eu só vim buscar minhas coisas que ficaram aqui." Entrei, peguei a sacola do armário, e quando saí ela ficou no corredor falando que precisava explicar. Desci as escadas sem olhar pra trás.
 
 Post 3:
-Meu namorado me ligou catorze vezes. Atendi na décima quinta. Ele disse que ia explicar. Eu disse: "Não precisa." Desliguei. Fui pra casa da minha mãe e fiquei lá por três dias sem falar com ninguém.
+Meu namorado me ligou catorze vezes enquanto eu dirigia de volta pra casa. Contei cada ligação. Deixei ir pro voicemail. Na décima quinta atendi e fiquei em silêncio. Ele disse que ia explicar, que não era o que parecia. Perguntei: "O que parecia?" Ele começou a falar e eu desliguei. Cheguei em casa, sentei na cama e fiquei olhando pro teto. Não saiu nem uma lágrima. Só aquela coisa que aperta no peito e não vai embora.
 
 Post 4:
+Fui pra casa da minha mãe e fiquei lá por três dias sem atender ninguém do meu círculo. No terceiro dia ela perguntou se eu queria falar. Eu disse: "Ainda não." Ela foi fazer chá e ficou do meu lado em silêncio enquanto eu olhava pela janela. Às vezes é isso que a gente mais precisa.
+
+Post 5:
 No quarto dia minha prima veio me ver. Ficamos conversando até tarde. Antes de ir ela deixou isso aqui [LINK] em cima da mesa: "Comprei pensando em você. Abre quando estiver sozinha." Abri depois que ela foi. Você confrontaria os dois juntos ou separado?`,
 
   `Post 1:
-Minha sogra ligou pro meu chefe e disse que eu era instável emocionalmente. Fiquei sabendo dois anos depois, quando minha cunhada me mostrou o print de uma conversa onde ela admitia pra uma amiga o que tinha feito.
+Minha sogra ligou pro meu chefe e disse que eu era instável emocionalmente e que ele deveria me monitorar. Fiquei sabendo dois anos depois, quando minha cunhada me mostrou o print de uma conversa onde ela admitia pra uma amiga o que tinha feito, rindo de como eu nunca tinha descoberto. Dois anos eu levei feedbacks estranhos do meu gestor e me culpei achando que o problema era o meu trabalho. Enquanto isso ela aparecia na minha casa todo domingo tomando café como se nada tivesse acontecido.
 
 Post 2:
-Fui direto até a casa dela. Meu marido foi junto sem saber o que ia acontecer. Cheguei, coloquei o celular na mesa com o print aberto e falei: "Você quer explicar isso?" Ela ficou vermelha. Meu marido leu. Ficou em silêncio. Ela tentou falar. Ele ergueu a mão: "Não agora."
+Fui direto até a casa dela. Meu marido foi junto sem saber exatamente o que ia acontecer. Cheguei, sentei na cadeira da frente, coloquei o celular na mesa com o print aberto e perguntei: "Você quer me explicar isso?" Ela olhou pro celular. Ficou vermelha. Meu marido se aproximou pra ler. Ela abriu a boca. Ele ergueu a mão: "Não agora."
 
 Post 3:
-No carro de volta pra casa, meu marido ficou vinte minutos sem dizer nada. Depois falou: "Eu não sabia." Eu disse: "Eu sei." Ficamos em silêncio o resto do caminho. Aquela noite foi a mais estranha que a gente já teve juntos.
+No carro de volta meu marido ficou vinte minutos sem falar nada. Olhava pra frente. Depois disse: "Eu não sabia." Eu disse: "Eu sei." Chegamos em casa, ele foi pro quarto e ficou lá. Eu fiquei sentada na cozinha no escuro por não sei quanto tempo. Aquela noite foi a mais estranha que a gente já teve juntos.
 
 Post 4:
-Uma semana depois minha irmã veio me visitar. Ficou me ajudando a organizar a cozinha — ela sempre faz isso quando algo vai mal. Antes de ir me mostrou isso aqui [LINK]: "Vi e pensei em você. Comprei pra te animar." Vocês perdoariam ou cortariam de vez?`,
+Meu marido não falou com ela por três meses. A promoção que eu perdi, o tempo que não volta, o gestor que ainda me olha diferente. Não tem pedido de desculpa que conserta isso. Mas pelo menos eu sei o que aconteceu. Por dois anos eu não sabia, e era pior.
+
+Post 5:
+Uma semana depois minha irmã veio me visitar e ficou me ajudando a organizar a cozinha — ela sempre faz isso quando algo vai mal. Antes de ir me mostrou isso aqui [LINK]: "Vi e pensei em você. Comprei pra te animar." Vocês perdoariam ou cortariam de vez?`,
 
   `Post 1:
-Meu cunhado tentou me beijar na cozinha durante o aniversário do meu marido. Eu tinha ido buscar uma bebida. Ele apareceu do nada e falou: "Sempre gostei de você." Congelei. Voltei pra sala e fiquei sorrindo pro meu marido pelo resto da noite como se nada tivesse acontecido.
+Meu cunhado tentou me beijar na cozinha durante o aniversário do meu marido. Eu tinha ido buscar uma bebida e ele apareceu do nada, encostou no balcão do meu lado e falou bem baixo: "Você é a mais bonita da família, você sabe?" Congelei. Antes que eu conseguisse responder ele se inclinou. Recuei. Ele disse: "Sempre gostei de você." Saí da cozinha com o copo na mão e voltei pra sala sorrindo pro meu marido como se tivesse tudo bem.
 
 Post 2:
-Em casa, contei tudo. Meu marido ouviu sem interromper. Quando terminei ele ficou quieto uns dois minutos. Então falou: "Você pode ter entendido diferente." Olhei pra ele. "Diferente como?" Ele se levantou e foi pro quarto.
+Fiquei aquela festa inteira com aquilo na cabeça. Toda vez que ele entrava num cômodo eu saía. Quando a família foi tirar foto eu fui pro lado oposto. Meu marido perguntou duas vezes se eu estava bem. Falei que estava com dor de cabeça. Na hora de ir embora meu cunhado me deu tchau como se nada tivesse acontecido, abraço e tudo.
 
 Post 3:
-Dormi no sofá. De madrugada meu marido veio me buscar. Disse que tinha processado e que ia falar com o irmão. Na manhã seguinte ele fez isso. Não sei o que foi dito. Meu cunhado me mandou mensagem pedindo desculpa. Não respondi.
+Em casa, esperei meu marido sentar e contei tudo. Ele ouviu sem interromper até o fim. Depois ficou quieto por uns dois minutos. Então disse: "Você deve ter entendido errado. Ele não faria isso." Olhei pra ele. "Entendido errado como?" Ele se levantou e foi pro quarto. Fiquei no sofá sozinha até meia-noite.
 
 Post 4:
-Minha amiga ligou pra saber como eu estava. No final falou que ia passar em casa. Chegou com isso aqui [LINK]: "Vi e lembrei de você. Sem motivo nenhum." Ainda bem que tem gente assim. Eu fui ingênua em contar pro meu marido ou fiz certo?`,
+De madrugada meu marido voltou. Disse que tinha pensado, que me acreditava, e que ia conversar com o irmão. Na manhã seguinte ele fez isso. Não sei o que foi dito. Meu cunhado me mandou mensagem pedindo desculpa "se eu tinha me sentido desconfortável". Não respondi. Até hoje ele não apareceu mais nas reuniões de família.
+
+Post 5:
+Minha amiga ligou pra saber como eu estava. No final disse que ia passar em casa. Chegou com isso aqui [LINK]: "Vi e lembrei de você. Sem motivo nenhum." Tem gente que aparece na hora certa. Eu fui ingênua em contar pro meu marido ou fiz certo?`,
 
   `Post 1:
-Minha vizinha espalhou pelo prédio que eu estava tendo um caso com o marido dela. Soube porque minha outra vizinha veio até mim com pena. Bati na porta dela no mesmo dia.
+Minha vizinha espalhou pelo prédio inteiro que eu estava tendo um caso com o marido dela. Fiquei sabendo porque minha outra vizinha do quinto desceu até mim com cara de pena e contou tudo: minha vizinha tinha falado pro grupo dos moradores, pra portaria, e pra pelo menos três famílias do bloco. Sem prova. Sem nada. Só inventou e foi distribuindo.
 
 Post 2:
-Ela abriu e ficou me olhando. Perguntei: "Você foi falar isso de mim pro prédio?" Negou. Eu disse: "A moradora do 502 me contou palavra por palavra." Ela cruzou os braços: "Cada um entende do jeito que quer." Fechei a cara: "Isso não vai ficar assim."
+Subi direto até o apartamento dela e bati na porta. Ela abriu e ficou me olhando. Perguntei: "Você foi falar isso sobre mim pro prédio?" Ela negou na hora. Eu disse: "A moradora do 502 me contou palavra por palavra." Ela cruzou os braços: "Cada um entende do jeito que quer." Fechei a cara: "Isso não vai ficar assim."
 
 Post 3:
-Fui até o síndico, abri reclamação formal e mandei áudio no grupo do prédio contando o que estava acontecendo. Ela respondeu me chamando de dramática. Cinco pessoas me mandaram mensagem em particular dizendo que ela já tinha feito isso com outras moradoras.
+Fui até o síndico na mesma tarde e abri reclamação formal com data e descrição. Depois entrei no grupo dos moradores e mandei um áudio de dois minutos contando o que tinha acontecido. Ela respondeu no grupo me chamando de dramática. Em menos de uma hora, cinco pessoas me mandaram mensagem em particular dizendo que ela já tinha feito aquilo com outras moradoras antes de mim.
 
 Post 4:
-A vizinha do 502 voltou no dia seguinte com um café. Antes de ir tirou isso aqui [LINK] da bolsa: "Vi numa loja e trouxe pra você. Você merecia um gesto bom essa semana." Às vezes a pessoa certa aparece na hora exata. Você teria ficado quieta ou feito igual a mim?`,
+Não consegui dormir direito por dias. Ficava pensando em como continuar morando no mesmo bloco que uma pessoa assim. No elevador ela fingia que eu não existia. Eu também. A diferença é que eu sei exatamente o que ela fez, e ela sabe que eu sei.
+
+Post 5:
+A vizinha do 502 desceu com café na minha porta dois dias depois. Antes de ir tirou isso aqui [LINK] da bolsa: "Vi numa loja essa semana e trouxe pra você. Você merecia um gesto bom." Às vezes a pessoa certa aparece na hora exata. Você teria ficado quieta ou feito igual a mim?`,
 
   `Post 1:
-Minha irmã contou pro meu pai que eu tinha terminado meu casamento por causa de outro homem. Não era verdade. E mesmo se fosse, não era pra ela contar. Meu pai me ligou em dez minutos.
+Minha irmã contou pro meu pai que eu tinha terminado meu casamento por causa de outro homem. Não era verdade. Terminei porque o casamento tinha acabado há tempos. Mas mesmo se fosse verdade, não era decisão dela ligar pro meu pai e contar qualquer coisa. Meu pai me ligou em dez minutos com uma voz que eu não ouvia desde que eu era adolescente.
 
 Post 2:
-Liguei pra ela perguntando por que tinha feito isso. Ela disse: "Tô preocupada com você." Eu disse: "Preocupada você me liga. Não vai falar pro meu pai inventando história." Ela ficou em silêncio. Depois falou: "Eu não inventei tudo." Como se isso fosse melhor.
+Ele perguntou diretamente: "É verdade que você está se envolvendo com outro homem?" Fechei os olhos. Respirei. Disse que não era verdade e que ia explicar pessoalmente. Desliguei e liguei pra minha irmã na mesma hora. Perguntei: "Por que você fez isso?" Ela disse: "Tô preocupada com você." Eu disse: "Preocupada você me liga. Não vai falar pro meu pai inventando história." Ela ficou em silêncio. Depois disse, com uma voz calma que me irritou mais do que qualquer grito: "Eu não inventei tudo."
 
 Post 3:
-Fui até a casa dos meus pais naquele fim de semana só pra explicar tudo pessoalmente. Meu pai me ouviu. No final disse: "Eu devia ter perguntado pra você primeiro." Minha irmã não apareceu. Ainda bem.
+Fui até a casa dos meus pais naquele fim de semana pra explicar tudo pessoalmente. Meu pai me ouviu até o fim. Quando eu terminei, ele ficou em silêncio por um tempo e depois disse: "Eu devia ter perguntado pra você primeiro." Minha irmã não apareceu naquele fim de semana. Ainda bem. Eu não sabia o que ia acontecer se eu a visse.
 
 Post 4:
-Minha mãe veio me ver no apartamento dias depois. Não falou nada sobre a situação com minha irmã. Só entrou, olhou em volta e colocou isso aqui [LINK] em cima da bancada: "Vi e achei que ia combinar com você." Mãe sabe a hora certa de não falar nada. Você perdoava num mês ou precisava de mais tempo?`,
+Fiquei duas semanas sem falar com ela. Ela mandou mensagem algumas vezes. Não respondi. Numa delas dizia "eu fiz por amor". Deixei na hora azul e botei o celular virado pra baixo.
+
+Post 5:
+Minha mãe veio me ver no apartamento numa tarde. Não falou nada sobre a situação. Só entrou, olhou em volta e colocou isso aqui [LINK] em cima da bancada: "Vi e achei que ia combinar com você." Mãe sabe exatamente a hora de não falar nada. Você perdoava num mês ou precisava de mais tempo?`,
 
   `Post 1:
-Minha amiga me indicou pra uma vaga e ficou me ajudando a preparar. Currículo, simulação de entrevista, feedback. Quando me chamaram ela disse que estava feliz por mim. Fiquei sabendo depois que ela mesma tinha ligado pra empresa falando mal de mim antes da entrevista.
+Minha amiga me indicou pra uma vaga que ela mesma queria mas não tinha conseguido. Ficou me ajudando por semanas — currículo, simulação de entrevista, dica de como responder cada pergunta difícil. Quando me chamaram ela disse que estava feliz por mim. Fiquei sabendo depois, por uma conhecida que trabalhava no RH, que minha amiga tinha ligado pra empresa antes da minha entrevista pra dizer que eu tinha "problemas de comprometimento com prazo".
 
 Post 2:
-Chamei ela pra tomar café. Sentei. Pedi o café. Esperei ela se acomodar. Então coloquei o celular na mesa com a mensagem aberta: "Você quer me explicar isso?" Ela ficou branca. Disse que foi mal entendido. Eu disse: "Não precisa. Eu só vim pra você saber que eu sei."
+A conhecida me mandou mensagem perguntando se eu sabia que aquilo tinha acontecido. Fiquei olhando pro celular por uns cinco minutos sem conseguir responder. Pensei em tudo que minha amiga tinha me ajudado a preparar. Cada simulação de entrevista. Cada feedback que ela dava com aquela voz de quem quer o melhor pra você. Liguei pra ela e disse que queria tomar café.
 
 Post 3:
-Paguei o meu café e fui embora. Ela ficou me ligando o dia inteiro. Não atendi. Uma semana depois ainda estava ligando. Em algum momento parei de sentir que precisava responder.
+Cheguei primeiro, pedi o café, esperei ela se acomodar no lugar dela. Quando ela estava com o copo na mão eu coloquei o celular na mesa com a mensagem da conhecida aberta e falei: "Você quer me explicar isso?" Ela ficou branca. Parou com o copo no ar. Depois disse: "Isso foi mal entendido, deixa eu explicar." Eu disse: "Não precisa. Eu só vim pra você saber que eu sei." Deixei o dinheiro do café na mesa e fui embora sem esperar a conta.
 
 Post 4:
-Minha colega do trabalho passou em casa na sexta. Ficamos conversando, ela trouxe pizza. Na hora de ir colocou isso aqui [LINK] na mesa: "Vi essa semana e comprei pra você. Não precisava de motivo." Às vezes a gente precisa de uma coisa boa depois de uma semana dessas. Você teria dado uma chance de explicação ou teria ido embora do café igual eu?`,
+Ela me ligou o dia inteiro. Mandou mensagem, mandou áudio, ligou de novo. Em algum momento eu percebi que não tinha mais nada pra ouvir. Bloqueei e fiquei com aquela sensação estranha de quando você perde alguém que você pensava que conhecia.
+
+Post 5:
+Minha colega do trabalho passou em casa na sexta com pizza. Ficamos conversando até tarde. Antes de ir colocou isso aqui [LINK] em cima da mesa: "Vi essa semana e comprei pra você. Não precisava de motivo." Às vezes é isso que salva a semana. Você teria dado uma chance de explicação ou teria ido embora do café igual eu?`,
 
   `Post 1:
-Meu ex publicou prints das minhas mensagens privadas num grupo com cinquenta pessoas. Mensagens de dois anos atrás, quando a gente ainda estava junto. Fiquei sabendo de manhã quando minha prima me encaminhou uma das capturas.
+Meu ex publicou prints das minhas mensagens privadas num grupo com cinquenta pessoas. Eram mensagens de dois anos atrás, quando a gente ainda estava junto — conversas que eu tinha em confiança, coisas da minha vida que eu tinha dividido só com ele. Fiquei sabendo de manhã quando minha prima me encaminhou uma das capturas com a mensagem: "Você já viu isso?"
 
 Post 2:
-Liguei pra ele. Atendeu na segunda chamada. Perguntei: "Por que você fez isso?" Ele disse: "Você me deixou mal." Eu disse: "E você acha que isso resolve alguma coisa?" Ele ficou em silêncio. Desliguei.
+Liguei pra ele. Atendeu na segunda chamada, com uma voz tranquila que me deixou ainda mais irritada do que qualquer outra coisa. Perguntei: "Por que você fez isso?" Ele disse, sem desviar: "Porque você me deixou mal." Eu disse: "E você acha que isso resolve alguma coisa?" Ele ficou em silêncio. Desliguei. Fui até o banheiro, lavei o rosto, olhei pro espelho e voltei pro celular.
 
 Post 3:
-Passei o dia todo respondendo mensagens de pessoas que tinham visto. Algumas com pena. Algumas com curiosidade. Uma perguntou se era verdade o que estava escrito. Respondi que não era assunto dela e bloqueei. À noite estava exausta e com raiva ao mesmo tempo.
+Passei o dia todo respondendo mensagens. Algumas pessoas mandaram com pena. Outras com curiosidade sobre os detalhes. Uma perguntou se era verdade o que estava escrito. Respondi que não era assunto dela e bloqueei. À noite estava exausta, com raiva, e com aquela sensação horrível de ter sido exposta sem ter feito nada.
 
 Post 4:
-Minha prima me buscou à noite. A gente saiu pra caminhar sem destino. Numa loja ela pegou isso aqui [LINK] e colocou na minha mão: "Compra. Você merece uma coisa boa hoje." Comprei. Você bloqueava ou enfrentava direto?`,
+No dia seguinte procurei um advogado. Ele explicou que divulgar mensagens privadas sem consentimento configura crime dependendo do conteúdo, e que eu tinha como agir. Mandei uma notificação extrajudicial. Duas horas depois meu ex apagou tudo, sumiu, e não mandou nenhuma mensagem. Só desapareceu como se tivesse sumido do mapa.
+
+Post 5:
+Minha prima me buscou à noite. A gente saiu pra caminhar sem destino. Numa loja pequena ela pegou isso aqui [LINK] e colocou na minha mão: "Compra. Você merece uma coisa boa hoje." Comprei. Você bloqueava direto ou enfrentava primeiro?`,
+
+  `Post 1:
+Minha irmã mais velha vendeu o apartamento que nosso pai tinha deixado pra nós duas. Eu não sabia. Ela usou uma procuração que eu tinha assinado anos atrás pra uma coisa completamente diferente — pra cuidar do IPTU enquanto eu morava fora. Fiquei sabendo por um vizinho que mandou mensagem perguntando se eu tinha me mudado. Fiquei olhando pra mensagem sem entender o que estava lendo.
+
+Post 2:
+Liguei pra ela. Ela atendeu normal, com aquela voz de sempre. Perguntei: "Você vendeu o apartamento?" Ela ficou em silêncio por dois segundos. Depois disse: "A gente precisava resolver essa situação." Eu disse: "Que situação? Era o apartamento do nosso pai." Ela disse: "Você nunca estava aqui pra cuidar de nada, então eu tomei uma decisão." Desliguei e liguei pro advogado que estava na minha agenda há anos sem nunca ter precisado usar.
+
+Post 3:
+O advogado pediu a procuração. Quando ela chegou na minha caixa de email, eu vi exatamente o que estava escrito — autorização pra gestão de documentos do imóvel, nada mais. Ela tinha usado isso pra assinar uma escritura de venda. Eram 280 mil reais que tinham sumido numa conta que eu não conhecia. Meu estômago virou.
+
+Post 4:
+Fui até a casa dela pessoalmente. Ela abriu a porta como se nada tivesse acontecido. Eu coloquei os documentos na mesa e disse: "Você quer me explicar o que está aqui?" Ela olhou e disse: "Você vai processar a sua própria irmã?" Eu disse, com uma calma que não sabia que tinha: "Já fiz." Ela ficou branca. Fechou a boca. Eu peguei meu casaco e fui embora.
+
+Post 5:
+Minha prima foi me ver no mesmo dia. Não sabia o que dizer, então não disse nada. Só sentou do meu lado. Antes de ir colocou isso aqui [LINK] na mesa da cozinha: "Comprei semana passada sem saber por quê. Hoje eu sei." Às vezes as pessoas aparecem exatamente na hora. Você teria processado ou tentado resolver por fora?`,
+
+  `Post 1:
+Contei pra minha melhor amiga que o marido dela tinha tentado me beijar no casamento do nosso amigo. Falei ainda naquela noite, com ele ainda no mesmo salão. Achei que ela ia acreditar em mim. Tínhamos doze anos de amizade. Ela me olhou, pegou o copo de vinho que estava na minha mão e disse: "Você tem certeza de que não está exagerando?" Aquelas palavras ficaram na minha cabeça por meses.
+
+Post 2:
+Nos dias seguintes ela foi ficando distante. Primeiro parou de responder rápido. Depois passou a deixar em visto. Numa quinta-feira me mandou uma mensagem longa dizendo que ela havia "conversado com o Paulo" e que ele tinha dado uma "versão completamente diferente". Que ela preferia acreditar no marido dela. Que eu estava "provavelmente confusa" por causa da bebida. Que ela me desejava bem.
+
+Post 3:
+No mês seguinte fiquei sabendo, por uma amiga em comum, que ela tinha contado pra todo mundo que eu tinha tentado "me aproximar" do marido dela. Virou um escândalo silencioso — o tipo de coisa onde ninguém te acusa na sua frente mas todo mundo te trata diferente. Recebi menos convites. Alguém me desfez no grupo de aniversário.
+
+Post 4:
+Decidi não me defender. Não ia ficar correndo atrás de pessoas explicando o que aconteceu. Quem me conhecia de verdade ou acreditava ou não acreditava — e nenhum dos dois precisava da minha versão pra decidir. Passei meses achando que tinha feito errado em falar. Demorei pra parar de achar isso.
+
+Post 5:
+Minha mãe apareceu numa sexta sem avisar. Só entrou, foi pra cozinha, aqueceu o que tinha na geladeira e me trouxe isso aqui [LINK]: "Vi essa semana e fiquei pensando em você." Ela nunca me pediu versão de nada. Nunca perguntou o que aconteceu. Só apareceu. Você teria ficado calada ou teria se defendido?`,
 ];
 
 // ─── HTTP utilities ───────────────────────────────────────────────────────────
@@ -428,7 +482,7 @@ export async function runStoryEngine(
   const ctx = { callCount: 0, totalTokens: 0 };
 
   // Pick 3 varied examples by seed — also track which indices were chosen
-  const { examples, indices: ragExampleIndices } = pickExamples(seed, 3);
+  const { examples, indices: ragExampleIndices } = pickExamples(seed, 2);
 
   // Voice Experiment V0 — resolve hint text (or null for control/disabled)
   const toneValue: VoiceToneValue = voiceExperiment?.value ?? "control";
@@ -438,20 +492,19 @@ export async function runStoryEngine(
 
   const system = `Escreva como alguém mandando uma sequência de mensagens para um amigo contando o que aconteceu.
 
-Estas histórias são sobre fofoca: traição, mentira, humilhação, sabotagem. Alguém próximo fez algo grave contra a narradora.
-A narradora descobre, confronta ou é confrontada — o drama acontece dentro da história, não é só relatado.
-Exemplos do que escrever: marido traindo com a irmã. Melhor amiga ficando com o namorado. Sogra ligando pro chefe inventar mentiras. Cunhado dando em cima. Vizinha espalhando mentiras no prédio.
-Nunca escreva sobre: jantares, receitas, visitas, compras, situações cotidianas sem traição ou conflito interpessoal grave.
+Estas histórias são sobre fofoca: traição, mentira, humilhação, sabotagem, exposição, abandono, inveja, segredos destruidores.
+Alguém próximo fez algo grave. A narradora descobre, confronta ou é confrontada — o drama acontece dentro da história, não é só relatado.
+Nunca escreva sobre: jantares, receitas, visitas sem conflito, compras, situações cotidianas sem traição grave.
 
 Regras de escrita:
-- não explique sentimentos
-- não escreva reflexões
-- faça alguém agir a cada 2 ou 3 frases
-- sempre que possível use diálogo real (o que a pessoa disse, palavra por palavra)
-- nunca escreva: "percebi", "entendi", "a sensação", "era mais do que", "naquele momento", "parecia"
-- se um parágrafo não muda a situação, apague
-- linguagem de conversa: "parecia cimento" — não "estava da forma mais inusitada possível"
-- 4 posts é o ideal — não escreva mais de 5`;
+- construa tensão em cada post — o leitor deve querer saber o que vem depois
+- mostre sentimentos através de reações físicas e ações — não apenas diga o que a pessoa sentiu
+- inclua o momento de confronto, humilhação ou choque com detalhes reais
+- use diálogo palavra por palavra — o que cada pessoa disse de verdade
+- descreva o que cada personagem fez após cada fala importante
+- nunca escreva: "percebi", "entendi", "a sensação", "era mais do que", "naquele momento"
+- linguagem coloquial: "parecia cimento" — não "da forma mais inusitada possível"
+- escreva 5 a 6 posts com desenvolvimento denso — não resuma, desenvolva cada cena`;
 
 
   // Strip any URLs — prevents product URL from leaking into the story
@@ -463,14 +516,17 @@ Regras de escrita:
     ? universe.pains.slice(0, 2).map(stripUrls).filter(Boolean).join("; ")
     : stripUrls(productName);
 
-  // Narrator context
+  // Narrator context — explicit gender rules so the model never confuses relationship pronouns
   const genderHint = narrator.sex === "female" ? "narradora mulher" : "narrador homem";
   const childrenHint = narrator.hasChildren ? "tem filhos" : "";
+  const genderRule = narrator.sex === "female"
+    ? "Parceiros românticos da narradora são HOMENS: namorado, marido, ex-namorado. Nunca use namorada, esposa, ex-namorada para se referir ao parceiro dela. Use feminino para a narradora (traída, sozinha, cansada)."
+    : "Parceiras românticas do narrador são MULHERES: namorada, esposa, ex-namorada. Nunca use namorado, marido, ex-namorado para se referir à parceira dele. Use masculino para o narrador (traído, sozinho, cansado).";
   const narratorContext = [genderHint, childrenHint].filter(Boolean).join(", ");
   // Voice hint appended after narrator line (descritivo, nunca instrução)
   const narratorLine = hintText
-    ? `Narrador: ${narratorContext}\n${hintText}`
-    : `Narrador: ${narratorContext}`;
+    ? `Narrador: ${narratorContext}\n${genderRule}\n${hintText}`
+    : `Narrador: ${narratorContext}\n${genderRule}`;
 
   const examplesBlock = examples
     .map((ex, i) => `=== EXEMPLO ${i + 1} ===\n${ex}`)
@@ -485,15 +541,8 @@ Conte como ele foi descoberto, o que as pessoas fizeram e o que aconteceu depois
 Você é livre para decidir quando revelar tudo e como organizar os posts.`
     : `Situação: alguém próximo fez algo grave contra a narradora — traiu, mentiu, humilhou, expôs, sabotou, abandonou, fingiu.`;
 
-  const user = `Leia os exemplos e aprenda o ritmo. Depois escreva algo completamente diferente.
-
-${examplesBlock}
-
----
-
-${situacaoLine}
-Contexto em que o produto aparece: ${situationContext}
-${narratorLine}
+  const productBlock = withLink
+    ? `Contexto em que o produto aparece: ${situationContext}
 
 Posts 1 até o penúltimo: só acontecimentos e falas. Sem mencionar o produto.
 Último post: crie uma cena de vida real onde o produto faz sentido aparecer depois do que aconteceu. Use o contexto (${situationContext}) para decidir QUAL cena seria essa. Nessa cena, outro personagem manda ou traz "isso aqui [LINK]" — nunca o narrador recomendando.
@@ -501,20 +550,34 @@ CERTO: "Minha mãe veio me ajudar a reorganizar o apartamento depois que ele sai
 CERTO: "Dias depois minha prima me mandou isso aqui [LINK] dizendo que tinha comprado pra mim quando me viu assim"
 ERRADO: "meu irmão me mandou isso aqui para me ajudar a superar" (vago, sem cena de vida real)
 Pergunta final: específica da situação. CERTO: "Eu fui sincera demais?" ERRADO: "Você também já passou por isso?"
-[LINK] = exatamente esses 6 caracteres. Não escreva URL. Não invente domínio.
+[LINK] = exatamente esses 6 caracteres. Não escreva URL. Não invente domínio. Nunca diga o que é o produto, nunca nomeie ou descreva o que está no link.`
+    : `Todos os posts: só acontecimentos, falas e reações. Sem mencionar produto ou link.
+Último post: encerre a história e termine com uma pergunta provocativa, específica da situação que aconteceu.
+CERTO: "Eu errei em confrontar ela na frente de todo mundo?" ERRADO: "Você também já passou por algo assim?"`;
+
+  const user = `Leia os exemplos APENAS para aprender o ritmo e o estilo. A história que você vai escrever deve ser completamente diferente — outros personagens, outro tipo de traição, outro cenário. Não repita o padrão dos exemplos.
+
+${examplesBlock}
+
+---
+
+${situacaoLine}
+${narratorLine}
+
+${productBlock}
 Não copie os exemplos.
 
 Responda APENAS com JSON válido:
 {"posts": [{"position": 1, "content": "..."}, {"position": 2, "content": "..."}]}`;
 
-  const text = await callLLM(system, user, config, 1400, ctx, "geração", 0, seed);
+  const text = await callLLM(system, user, config, 1800, ctx, "geração", 0, seed);
 
   let rawPosts: StoryPost[];
   try {
     const parsed = extractJson<{ posts: StoryPost[] }>(text);
     rawPosts = (parsed.posts ?? []).filter(p => p.content?.trim());
     if (rawPosts.length === 0) throw new Error("Nenhum post gerado.");
-    rawPosts = rawPosts.slice(0, 5);
+    rawPosts = rawPosts.slice(0, 6);
   } catch {
     throw new Error(`Falha ao parsear posts: ${text.slice(0, 200)}`);
   }
@@ -531,7 +594,7 @@ Responda APENAS com JSON válido:
       try {
         const retryText = await callLLM(system, retryUser, config, 1400, ctx, "retry-incident", 0, seed);
         const retryParsed = extractJson<{ posts: StoryPost[] }>(retryText);
-        const retryPosts = (retryParsed.posts ?? []).filter(p => p.content?.trim()).slice(0, 5);
+        const retryPosts = (retryParsed.posts ?? []).filter(p => p.content?.trim()).slice(0, 6);
         if (retryPosts.length > 0) {
           rawPosts = retryPosts;
           incidentFollowed = validateIncidentFollowed(rawPosts, incidentSeed);

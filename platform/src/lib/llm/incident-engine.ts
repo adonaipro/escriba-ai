@@ -1,10 +1,8 @@
-// Incident Engine V1 — Drama layer for Story Engine
+// Incident Engine V2 — Theme-based drama layer for Story Engine
 //
-// Generates high-curiosity incident candidates BEFORE the Writer runs.
-// The Writer receives the winning incident as context — it doesn't invent
-// a situation anymore, it narrates a specific human drama that already happened.
-//
-// Principle: "First the fofoca, then the product finds its place."
+// Seed selects one of N themes → LLM creates a completely free incident within that theme.
+// No keyword lists, no scoring, no anchoring.
+// Principle: "Give the AI a direction, never a script."
 
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
@@ -13,105 +11,40 @@ import type { IncidentExperimentData, IncidentCandidate } from "./pipeline-types
 // Feature flag — set false to revert to old behavior instantly
 export const INCIDENT_EXPERIMENT_ENABLED = true;
 
-// ─── Scoring heuristics ───────────────────────────────────────────────────────
+// ─── Theme list ───────────────────────────────────────────────────────────────
+// Seed picks a theme. LLM is totally free within it.
 
-const BETRAYAL_VERBS = [
-  // Traição / relacionamento
-  "traiu", "ficou com", "deu em cima", "tentou ficar", "trocou",
-  // Roubo / dinheiro
-  "roubou", "pegou sem", "usou sem", "vendeu", "desviou", "estragou", "destruiu o meu",
-  // Mentira / manipulação
-  "mentiu", "enganou", "fingiu", "manipulou", "inventou", "armou",
-  // Exposição / humilhação
-  "humilhou", "expôs", "publicou", "espalhou", "denunciou", "contou",
-  // Sabotagem / crédito / trabalho
-  "sabotou", "destruiu", "acusou", "culpou", "prejudicou", "assumiu o crédito", "se aproveitou",
-  // Expulsão / abandono
-  "expulsou", "abandonou", "processou",
-  // Outros graves
-  "apagou", "quebrou", "colocou a culpa",
+const DRAMA_THEMES = [
+  "traição romântica — alguém foi traído pelo parceiro ou parceira",
+  "traição com pessoa próxima — traiu com amiga, cunhada, irmã, vizinha",
+  "roubo ou fraude — dinheiro, herança, objeto, conta bancária",
+  "mentira e manipulação — alguém fingiu, inventou, manipulou por longo tempo",
+  "exposição pública — prints vazados, grupo com família, humilhação na frente de todos",
+  "sabotagem — emprego, carreira, reputação destruída por alguém de confiança",
+  "inveja disfarçada de amizade — amiga ou amigo que torcia para dar errado",
+  "abandono ou rejeição — pai, mãe, parceiro que sumiu quando mais precisava",
+  "segredo destruidor — algo guardado por anos que mudou tudo quando veio à tona",
+  "vingança e descoberta — a pessoa descobriu e tomou uma atitude inesperada",
+  "família que sabotou — sogra, cunhado, parente que tentou destruir o relacionamento",
+  "golpe emocional — usou amor ou amizade para conseguir algo e desapareceu",
 ];
 
-const NAMED_RELATIONSHIPS = [
-  "minha mãe", "meu pai", "minha irmã", "meu irmão", "minha amiga",
-  "meu amigo", "minha colega", "meu colega", "minha vizinha", "meu vizinho",
-  "minha prima", "meu primo", "minha sogra", "meu sogro", "meu ex", "minha ex",
-  "meu namorado", "minha namorada", "meu marido", "minha filha", "meu filho",
-  "minha cunhada", "meu cunhado", "minha tia", "meu tio",
-];
-
-const ACTIVITY_START_PATTERN = /^(fui |estava |tinha |ia |saí |cheguei |quando |ontem |hoje |de manhã |à tarde |à noite |no dia )/i;
-
-const HIGH_STAKES_WORDS = [
-  "emprego", "promoção", "viralizou", "família inteira", "todo mundo",
-  "perdi", "nunca soube", "até hoje", "dívida", "cartão de crédito",
-  "segredo que", "prometeu guardar",
-];
-
-const PRODUCT_ADJACENT = [
-  "comprou", "compra", "encomenda", "pacote", "produto", "presente",
-  "vendeu", "quebrou", "estragou", "destruiu", "devolveu", "jogou fora",
-  "dinheiro", "coisa minha", "armário", "roupa", "objeto",
-];
-
-function scoreCandidate(incident: string): Omit<IncidentCandidate, "incident"> {
-  const text = incident.toLowerCase();
-
-  const hasRelationship = NAMED_RELATIONSHIPS.some(r => text.includes(r));
-  const hasBetrayalVerb = BETRAYAL_VERBS.some(v => text.includes(v));
-
-  // Sem verbo de traição = não é fofoca. Eliminado.
-  if (!hasBetrayalVerb) {
-    return { curiosityScore: 0, storyDepth: 0, productFit: 0, totalScore: 0 };
-  }
-
-  // ── Curiosity (0-40): makes someone stop scrolling
-  const notActivityStart = !ACTIVITY_START_PATTERN.test(incident);
-  const isConcise = incident.length <= 200;
-
-  const curiosityScore = Math.min(40,
-    (hasRelationship ? 15 : 0) +
-    15 + // hasBetrayalVerb guaranteed true here
-    (notActivityStart ? 6 : 0) +
-    (isConcise ? 4 : 0),
-  );
-
-  // ── Story Depth (0-30): can build 4-6 posts around it
-  const hasHighStakes = HIGH_STAKES_WORDS.some(w => text.includes(w));
-
-  const storyDepth = Math.min(30,
-    (hasHighStakes ? 15 : 0) +
-    (hasBetrayalVerb ? 10 : 0) +
-    (hasRelationship ? 5 : 0),
-  );
-
-  // ── Product Fit (0-30): can a physical product appear naturally?
-  const hasProductContext = PRODUCT_ADJACENT.some(w => text.includes(w));
-  const hasBodyOrHome = ["casa", "cozinha", "quarto", "pé", "pés", "corpo", "pele", "cabelo"].some(w => text.includes(w));
-
-  const productFit = Math.min(30,
-    (hasProductContext ? 15 : 5) +
-    (hasBodyOrHome ? 10 : 5) +
-    5,
-  );
-
-  return { curiosityScore, storyDepth, productFit, totalScore: curiosityScore + storyDepth + productFit };
+// Deterministic theme pick by seed
+function pickTheme(seed: number): string {
+  let s = (seed >>> 0) ^ 0x9e3779b9;
+  s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+  s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+  s = (s ^ (s >>> 16)) >>> 0;
+  return DRAMA_THEMES[s % DRAMA_THEMES.length]!;
 }
 
 // ─── LLM call ────────────────────────────────────────────────────────────────
 
-function buildSituationContext(universe: ProductUniverse, productName: string): string {
-  const stripUrls = (s: string) => s.replace(/https?:\/\/[^\s,)]+/g, "").trim();
-  return universe.pains.length > 0
-    ? universe.pains.slice(0, 2).map(stripUrls).filter(Boolean).join("; ")
-    : stripUrls(productName);
-}
-
 async function callIncidentLLM(
-  situationContext: string,
+  theme: string,
   config: LlmProviderConfig,
   seed: number,
-): Promise<string[]> {
+): Promise<string> {
   const baseUrl = config.baseUrl?.replace(/\/$/, "") ?? (
     config.provider === "openai"     ? "https://api.openai.com/v1"    :
     config.provider === "openrouter" ? "https://openrouter.ai/api/v1" :
@@ -125,39 +58,21 @@ async function callIncidentLLM(
   );
   const supportsSeed = config.provider !== "anthropic";
 
-  const system = `Você gera fofocas para histórias virais no Threads.
+  const system = `Você cria a fofoca inicial para uma história viral no Threads.
 
-Uma fofoca: alguém fez algo ativo e grave contra outra pessoa.
-O leitor deve parar e pensar: "Como assim? Não acredito."
+Uma fofoca é uma frase que descreve o que aconteceu — quem fez o que, para quem.
+Ela deve ser específica o suficiente para uma história se desenvolver a partir dela.
+O leitor deve pensar: "Como assim? Não acredito. Quero saber mais."
 
-Exemplos de fofoca — TIPOS DIFERENTES:
-Infidelidade: "Meu marido estava me traindo com a minha irmã"
-Sabotagem profissional: "Minha colega assumiu o crédito do meu projeto na frente do diretor"
-Roubo/dinheiro: "Minha irmã vendeu minha herança sem me avisar enquanto eu estava viajando"
-Exposição: "Meu ex publicou prints das minhas mensagens privadas num grupo de 50 pessoas"
-Mentira/manipulação: "Minha sogra ligou para o meu chefe e inventou mentiras sobre mim"
-Expulsão familiar: "Meu cunhado tentou me expulsar de casa depois que meu pai morreu"
-Reputação: "Minha vizinha inventou uma história sobre mim e metade da rua acreditou"
-Traição de confiança: "Minha melhor amiga usou um segredo que eu contei pra ela pra me prejudicar"
-Abandono: "Meu pai me abandonou na rua quando eu tinha 16 anos e apareceu 10 anos depois pedindo dinheiro"
+Formato: começa com a relação ("Meu marido", "Minha irmã", "Minha amiga", "Meu colega", "Minha sogra", etc.) seguida do que aconteceu.
+Uma frase, curta e impactante. Não explique, não justifique — só o fato.`;
 
-Proibido: visitas, refeições, arrumação, compras, ligações calorosas, conflito sem ação ativa.`;
+  const user = `Tema: ${theme}
 
-  const user = `Contexto relacionado ao produto: ${situationContext}
-
-Gere 9 fofocas VARIADAS — misture tipos diferentes obrigatoriamente:
-- Infidelidade / romance (traiu, ficou com, deu em cima): máximo 2 das 9
-- Dinheiro / trabalho (roubou, vendeu, desviou, sabotou, assumiu crédito, prejudicou): pelo menos 3
-- Exposição / humilhação (expôs, publicou, espalhou mentira, humilhou, denunciou): pelo menos 2
-- Família / casa / abandono (expulsou, inventou mentira sobre, acusou, fingiu, abandonou, manipulou): pelo menos 2
-
-Cada fofoca:
-- Começa com a relação: "Meu marido", "Minha irmã", "Minha amiga", "Minha sogra", "Meu colega", etc.
-- Tem um verbo de ação grave e específico
-- É uma frase curta e impactante (uma linha)
+Crie UMA fofoca dentro desse tema. Seja completamente livre — crie a situação específica que você quiser, com os personagens que você quiser, no contexto que você quiser. Não precisa seguir nenhum exemplo. Só respeite o tema.
 
 Responda APENAS com JSON válido:
-{"candidates": ["...", "...", ...]}`;
+{"incident": "..."}`;
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -172,7 +87,7 @@ Responda APENAS com JSON válido:
         { role: "user",   content: user },
       ],
       temperature: 1.0,
-      max_tokens: 700,
+      max_tokens: 150,
       ...(supportsSeed ? { seed } : {}),
     }),
   });
@@ -191,57 +106,50 @@ Responda APENAS com JSON válido:
   const end = raw.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("Incident Engine: JSON não encontrado");
 
-  const parsed = JSON.parse(raw.slice(start, end + 1)) as { candidates?: unknown[] };
-  return (parsed.candidates ?? []).filter(
-    (c): c is string => typeof c === "string" && c.trim().length > 10,
-  );
+  const parsed = JSON.parse(raw.slice(start, end + 1)) as { incident?: unknown };
+  const incident = typeof parsed.incident === "string" ? parsed.incident.trim() : "";
+  if (incident.length < 10) throw new Error("Incident Engine: resposta vazia");
+  return incident;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function generateBestIncident(
-  universe: ProductUniverse,
-  productName: string,
+  _universe: ProductUniverse,
+  _productName: string,
   seed: number,
   config: LlmProviderConfig,
 ): Promise<{ selectedIncident: string; debug: IncidentExperimentData } | null> {
   if (!INCIDENT_EXPERIMENT_ENABLED) return null;
 
-  const situationContext = buildSituationContext(universe, productName);
+  const theme = pickTheme(seed);
 
-  let rawCandidates: string[];
+  let selectedIncident: string;
   try {
-    rawCandidates = await callIncidentLLM(situationContext, config, seed);
+    selectedIncident = await callIncidentLLM(theme, config, seed);
   } catch {
-    // Graceful degradation — story engine runs with its default situation line
     return null;
   }
 
-  if (rawCandidates.length < 2) return null;
-
-  const scored: IncidentCandidate[] = rawCandidates.map(incident => ({
-    incident,
-    ...scoreCandidate(incident),
-  }));
-
-  scored.sort((a, b) => b.totalScore - a.totalScore);
-
-  const winner = scored[0];
-  // totalScore === 0 significa que nenhum candidato passou no filtro de fofoca
-  if (!winner || winner.totalScore === 0) return null;
+  const candidates: IncidentCandidate[] = [{
+    incident: selectedIncident,
+    curiosityScore: 0,
+    storyDepth: 0,
+    productFit: 0,
+    totalScore: 0,
+  }];
 
   return {
-    selectedIncident: winner.incident,
+    selectedIncident,
     debug: {
       enabled: true,
-      candidates: scored,
-      selectedIncident: winner.incident,
-      rejectedIncidents: scored.slice(1).map(c => c.incident),
-      curiosityScore: winner.curiosityScore,
-      storyDepth: winner.storyDepth,
-      productFit: winner.productFit,
-      totalScore: winner.totalScore,
-      // Populated by narrative-engine after the Writer runs
+      candidates,
+      selectedIncident,
+      rejectedIncidents: [],
+      curiosityScore: 0,
+      storyDepth: 0,
+      productFit: 0,
+      totalScore: 0,
       incidentInjected: false,
       incidentFollowed: false,
       retryTriggered: false,

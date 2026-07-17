@@ -36,6 +36,7 @@ export interface NarrativeInput {
   narrator?: NarratorContext;
   activeHypotheses?: Array<{ dimension: string; value: string }>;
   productStrategy?: ProductStrategy;
+  contentMode?: string;
 }
 
 export interface NarrativePost {

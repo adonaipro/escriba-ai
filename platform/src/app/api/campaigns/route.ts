@@ -7,20 +7,54 @@ import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
 import { ACCOUNT_COOKIE } from "@/lib/account";
 
+const CONTENT_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
+type ContentModeValue = typeof CONTENT_MODES[number];
+
+function requiresProduct(mode?: ContentModeValue | null): boolean {
+  return !mode || mode === "story-produto" || mode === "story-organico";
+}
+
+const productSchema = z.object({
+  name: z.string().min(1),
+  url: z.string().url(),
+});
+
 const createSchema = z.object({
   name: z.string().min(3),
-  productUrl: z.string().url(),
-  productName: z.string().min(2),
+  // Legacy single-product fields (kept for backward compat, also sent by new form as first product)
+  productUrl: z.string().optional().default(""),
+  productName: z.string().optional().default(""),
+  // New: multi-product list
+  products: z.array(productSchema).optional(),
   marketplace: z.string().default("shopee"),
-  targetNetwork: z.string().min(1),
-  objective: z.string().default("sales"),
+  // New: multi-network list
+  targetNetworks: z.array(z.string()).optional(),
+  targetNetwork: z.string().optional().default("threads"),
   language: z.string().default("pt-BR"),
-  aiModel: z.string().default("simulated"),
   approvalMode: z.string().default("manual"),
   trendsPerDay: z.number().int().min(1).max(10).default(2),
   postsPerDay: z.number().int().min(0).max(20).default(7),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  // New: schedule
+  scheduleDays: z.array(z.number().int().min(0).max(6)).optional(),
+  scheduleTimes: z.array(z.string()).optional(),
+  contentMode: z.enum(CONTENT_MODES).optional().default("story-produto"),
+}).superRefine((val, ctx) => {
+  if (requiresProduct(val.contentMode)) {
+    const products = val.products;
+    if (products && products.length > 0) {
+      // Validated by productSchema above
+    } else {
+      // Fall back to legacy fields
+      if (!val.productUrl) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Adicione pelo menos um produto com link e nome", path: ["products"] });
+      }
+      if (!val.productName || val.productName.trim().length < 2) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Nome do produto obrigatório", path: ["productName"] });
+      }
+    }
+  }
 });
 
 export async function GET(request: NextRequest) {
@@ -31,7 +65,6 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const status = searchParams.get("status");
-
   const accountId = request.cookies.get(ACCOUNT_COOKIE)?.value ?? null;
 
   const campaigns = await prisma.campaign.findMany({
@@ -83,39 +116,63 @@ export async function POST(request: NextRequest) {
     const data = createSchema.parse(body);
     const accountId = request.cookies.get(ACCOUNT_COOKIE)?.value ?? null;
 
+    // Resolve product fields — prefer multi-product array, fall back to legacy fields
+    const products = data.products && data.products.length > 0
+      ? data.products
+      : data.productUrl
+        ? [{ name: data.productName ?? "", url: data.productUrl }]
+        : [];
+
+    const firstProduct = products[0];
+    const productUrl  = firstProduct?.url  ?? "";
+    const productName = firstProduct?.name ?? "";
+
+    // Resolve network — prefer multi-network array, fall back to legacy field
+    const targetNetworks = data.targetNetworks && data.targetNetworks.length > 0
+      ? data.targetNetworks
+      : [data.targetNetwork ?? "threads"];
+    const primaryNetwork = targetNetworks[0] ?? "threads";
+
+    const customSchedule = JSON.stringify({
+      contentMode: data.contentMode,
+      products,
+      targetNetworks,
+      scheduleDays: data.scheduleDays ?? [1, 2, 3, 4, 5],
+      scheduleTimes: data.scheduleTimes ?? [],
+    });
+
     const campaign = await prisma.campaign.create({
       data: {
         profileId: session.user.profile.id,
         ...(accountId ? { socialAccountId: accountId } : {}),
         name: data.name,
-        productUrl: data.productUrl,
-        productName: data.productName,
+        productUrl,
+        productName,
         marketplace: data.marketplace,
-        targetNetwork: data.targetNetwork,
-        objective: data.objective,
+        targetNetwork: primaryNetwork,
+        objective: "sales",
         language: data.language,
-        aiModel: data.aiModel,
+        aiModel: "llm",
         approvalMode: data.approvalMode,
         trendsPerDay: data.trendsPerDay,
         postsPerDay: data.postsPerDay,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
+        customSchedule,
         status: "testing",
         mode: "test",
       },
     });
 
-    // Record campaign creation event
     await prisma.campaignEvent.create({
       data: {
         campaignId: campaign.id,
         type: "created",
         title: "Campanha criada",
-        description: `Produto: ${data.productName} · Rede: ${data.targetNetwork}`,
+        description: `Produto: ${productName} · Rede: ${targetNetworks.join(", ")}`,
       },
     });
 
-    // Create a generation job and fire immediately in background
     const job = await prisma.generationJob.create({
       data: { campaignId: campaign.id },
     });
@@ -124,7 +181,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ campaign, jobId: job.id }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
+      return NextResponse.json({ error: error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
     }
     console.error("Create campaign error:", error);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

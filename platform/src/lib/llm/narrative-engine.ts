@@ -27,6 +27,8 @@ import type { LlmProviderConfig } from "./types";
 import type { PipelineNarratorData, VoiceToneExperiment } from "./pipeline-types";
 import { runStoryEngine, type StoryDebugData } from "./story-engine";
 import { generateBestIncident } from "./incident-engine";
+import { generateContentPost, type SingleContentMode } from "./content-engine";
+import type { ContentMode } from "./pipeline-types";
 
 export type { StoryDebugData };
 
@@ -862,7 +864,38 @@ export async function buildNarrativeLLM(
     livesAlone: boolean;
   },
   voiceExperiment?: VoiceToneExperiment,
+  contentMode?: ContentMode,
 ): Promise<BuiltNarrative & { pipelineDebug?: StoryDebugData }> {
+  // ── Single-post content modes (desabafo / polemica / pergunta) ───────────────
+  if (contentMode && contentMode !== "story-produto" && contentMode !== "story-organico") {
+    if (!llmConfig) throw new Error("LLM config obrigatório para modos de conteúdo");
+    const universe = storedAnalysis
+      ? buildUniverseFromStoredAnalysis(storedAnalysis)
+      : analyzeProduct(productName, productUrl);
+    const result = await generateContentPost(universe, contentMode as SingleContentMode, seed, llmConfig);
+    return {
+      role:             "narradora",
+      emotion:          "reflexivo",
+      conflictObject:   "",
+      sceneMoment:      "",
+      moralQuestion:    "",
+      family:           contentMode,
+      setting:          "",
+      twist:            "",
+      hook:             result.post.split("\n")[0] ?? "",
+      narrativeSummary: `${contentMode} · gerado`,
+      productPosition:  0,
+      productStrategy:  "contextual",
+      tone:             "reflexivo",
+      rhythm:           "médio",
+      conflictType:     contentMode,
+      structureType:    "content-engine",
+      openingStyle:     contentMode,
+      questionType:     "engagement",
+      posts: [{ position: 1, content: result.post, hasMedia: false }],
+    } as BuiltNarrative;
+  }
+
   if (!llmConfig) {
     return {
       ...buildNarrativeStaircase(productName, productUrl, seed, undefined, undefined, undefined, narrator, productStrategy, undefined, storedAnalysis),
@@ -898,6 +931,8 @@ export async function buildNarrativeLLM(
 
   const incidentResult = await generateBestIncident(universe, productName, seed, llmConfig);
 
+  const withLink = contentMode !== "story-organico";
+
   const storyResult = await runStoryEngine(
     universe,
     productName,
@@ -905,7 +940,7 @@ export async function buildNarrativeLLM(
     narratorFull,
     seed,
     llmConfig,
-    true,
+    withLink,
     voiceExperiment,
     incidentResult?.selectedIncident,
   );

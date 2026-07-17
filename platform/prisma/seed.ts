@@ -1,21 +1,12 @@
 import "dotenv/config";
-import path from "path";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
-function resolveDbUrl(): string {
-  const raw = process.env.DATABASE_URL || "file:./dev.db";
-  if (raw.startsWith("file:") && !raw.startsWith("file://")) {
-    const filePath = raw.slice("file:".length);
-    const abs = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-    return "file:" + abs.replace(/\\/g, "/");
-  }
-  return raw;
-}
-
-const adapter = new PrismaLibSql({ url: resolveDbUrl() });
-const prisma = new PrismaClient({ adapter });
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL não definida");
+const adapter = new PrismaPg({ connectionString: url });
+const prisma = new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
 
 const NOW = new Date("2026-07-12T12:00:00Z");
 function daysAgo(n: number) { return new Date(NOW.getTime() - n * 86400000); }

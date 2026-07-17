@@ -218,9 +218,34 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     }
     // ────────────────────────────────────────────────────────────────
 
+    let contentMode: string | undefined;
+    let productName = campaign.productName;
+    let productUrl  = campaign.productUrl;
+
+    if (campaign.customSchedule) {
+      try {
+        const sched = JSON.parse(campaign.customSchedule) as {
+          contentMode?: string;
+          products?: { name: string; url: string }[];
+        };
+        contentMode = sched.contentMode;
+
+        // Multi-product rotation: pick next product based on how many trends exist already
+        if (sched.products && sched.products.length > 1) {
+          const trendCount = await prisma.trend.count({ where: { campaignId: campaign.id } });
+          const idx = trendCount % sched.products.length;
+          const picked = sched.products[idx];
+          if (picked) {
+            productName = picked.name;
+            productUrl  = picked.url;
+          }
+        }
+      } catch { /* malformed JSON — ignore */ }
+    }
+
     const input: NarrativeInput = {
-      productName: campaign.productName,
-      productUrl: campaign.productUrl,
+      productName,
+      productUrl,
       marketplace: campaign.marketplace,
       targetNetwork: campaign.targetNetwork,
       niche: campaign.profile?.niche,
@@ -234,6 +259,7 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       })),
       narrator: narratorContext,
       activeHypotheses,
+      contentMode,
     };
 
     const provider = getLlmProvider(llmConfig);

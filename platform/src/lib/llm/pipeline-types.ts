@@ -119,6 +119,15 @@ export interface StoryScore {
   issues: string[];
 }
 
+// ─── Content Modes ────────────────────────────────────────────────────────────
+
+export type ContentMode =
+  | "story-produto"   // História com link de produto (padrão)
+  | "story-organico"  // História sem produto — CTA de engajamento
+  | "desabafo"        // Post único — pensamento/desabafo
+  | "polemica"        // Post único — opinião polêmica
+  | "pergunta"        // Post único — pergunta ao público
+
 // ─── Voice Experiment V0 (tone only) ─────────────────────────────────────────
 
 export type VoiceToneValue = "control" | "leve" | "direta" | "emocional";
