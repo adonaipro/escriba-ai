@@ -81,7 +81,7 @@ function TagList({ items, color = "zinc" }: { items: string[]; color?: string })
   if (!items.length) return <span className="text-xs text-zinc-600">—</span>;
   const colorMap: Record<string, string> = {
     zinc:    "bg-zinc-800 text-zinc-300 border-zinc-700",
-    violet:  "bg-violet-950/40 text-violet-300 border-violet-800/40",
+    violet:  "bg-pink-950/40 text-pink-300 border-pink-800/40",
     emerald: "bg-emerald-950/40 text-emerald-300 border-emerald-800/40",
     amber:   "bg-amber-950/40 text-amber-300 border-amber-800/40",
     red:     "bg-red-950/40 text-red-300 border-red-800/40",
@@ -102,7 +102,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Icon className="h-4 w-4 text-violet-400" />
+        <Icon className="h-4 w-4 text-pink-400" />
         <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
       </div>
       {children}
@@ -206,7 +206,7 @@ export function ProductDetailClient({
 
             {/* Action buttons */}
             <div className="flex gap-2 mt-4">
-              <Button size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+              <Button size="sm" className="gap-1.5 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 onClick={() => router.push(`/laboratorio?productId=${product.id}`)}>
                 <FlaskConical className="h-3.5 w-3.5" /> Testar no Lab
               </Button>
@@ -295,9 +295,9 @@ export function ProductDetailClient({
 
           {/* Universo Narrativo */}
           {analysis && (
-            <div className="rounded-xl border border-violet-800/30 bg-violet-950/10 p-5">
+            <div className="rounded-xl border border-pink-800/30 bg-pink-950/10 p-5">
               <div className="flex items-center gap-2 mb-5">
-                <Sparkles className="h-4 w-4 text-violet-400" />
+                <Sparkles className="h-4 w-4 text-pink-400" />
                 <h3 className="text-sm font-semibold text-zinc-100">Universo Narrativo</h3>
                 <span className="ml-auto text-xs text-zinc-600">{analysis.categoryLabel}</span>
               </div>
@@ -330,7 +330,7 @@ export function ProductDetailClient({
               </div>
 
               {analysis.bridgeTopics.length > 0 && (
-                <div className="mt-5 pt-5 border-t border-violet-800/20">
+                <div className="mt-5 pt-5 border-t border-pink-800/20">
                   <p className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wide">Pontes para Narrativa Híbrida</p>
                   <TagList items={analysis.bridgeTopics} color="violet" />
                 </div>
@@ -348,12 +348,12 @@ export function ProductDetailClient({
                   { strategy: "hybrid", label: "Híbrida", desc: "Conflito humano com ponte lógica para o produto via tópicos de transição.", color: "blue" },
                 ].map(({ strategy, label, desc, color }) => (
                   <div key={strategy} className={`rounded-lg border p-3 ${
-                    color === "violet" ? "border-violet-800/40 bg-violet-950/20" :
+                    color === "violet" ? "border-pink-800/40 bg-pink-950/20" :
                     color === "blue" ? "border-blue-800/40 bg-blue-950/20" :
                     "border-zinc-700 bg-zinc-800/50"
                   }`}>
                     <p className={`text-xs font-semibold mb-1 ${
-                      color === "violet" ? "text-violet-300" :
+                      color === "violet" ? "text-pink-300" :
                       color === "blue" ? "text-blue-300" :
                       "text-zinc-300"
                     }`}>{label}</p>
@@ -418,7 +418,7 @@ export function ProductDetailClient({
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 text-center">
               <Brain className="h-8 w-8 text-zinc-700 mx-auto mb-3" />
               <p className="text-sm text-zinc-400 mb-3">Universo narrativo ainda não mapeado.</p>
-              <Button size="sm" onClick={handleReanalyze} disabled={reanalyzing} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
+              <Button size="sm" onClick={handleReanalyze} disabled={reanalyzing} className="bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white gap-2">
                 {reanalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
                 Analisar agora
               </Button>

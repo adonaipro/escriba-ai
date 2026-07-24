@@ -5,6 +5,7 @@ import {
   TrendingUp,
   TrendingDown,
   MousePointerClick,
+  Eye,
   DollarSign,
   Users,
   AlertTriangle,
@@ -17,6 +18,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
+import { resolveDateRange } from "@/lib/analytics/date-range";
+import { DateRangeFilter } from "@/components/analytics/date-range-filter";
+import { format } from "date-fns";
+import { PerformanceChart } from "@/components/analytics/performance-chart";
 
 interface AccountMetrics {
   id: string;
@@ -30,12 +35,20 @@ interface AccountMetrics {
   totalConversions: number;
   totalRevenue: number;
   ctr: number;
+  totalEngagements: number;
+  engagementRate: number;
+  averageViews: number;
   campaignsCount: number;
+  publishedCampaigns: number;
+  activeCampaigns: number;
+  scheduledPublications: number;
+  failedPublications: number;
   scalingCampaigns: number;
   hasAlert: boolean;
 }
 
-async function getWorkspaceData(profileId: string) {
+async function getWorkspaceData(profileId: string, range: ReturnType<typeof resolveDateRange>) {
+  const publishedAt = range.from ? { gte: range.from, lte: range.to } : { lte: range.to };
   const accounts = await prisma.socialAccount.findMany({
     where: { profileId, status: "active" },
     include: {
@@ -47,8 +60,8 @@ async function getWorkspaceData(profileId: string) {
       campaigns: {
         include: {
           publications: {
-            where: { status: "published" },
-            select: { clicks: true, impressions: true, revenueBrl: true, conversions: true },
+            where: { OR: [{ status: "published", publishedAt }, { status: { not: "published" } }] },
+            select: { status: true, clicks: true, impressions: true, revenueBrl: true, conversions: true, likes: true, replies: true, reposts: true, quotes: true, shares: true, metricsSyncedAt: true, publishedAt: true },
           },
         },
       },
@@ -57,13 +70,19 @@ async function getWorkspaceData(profileId: string) {
   });
 
   const metrics: AccountMetrics[] = accounts.map((a) => {
-    const allPubs = a.campaigns.flatMap((c) => c.publications);
+    const everyPublication = a.campaigns.flatMap((c) => c.publications);
+    const allPubs = everyPublication.filter((publication) => publication.status === "published");
     const totalClicks = allPubs.reduce((s, p) => s + (p.clicks ?? 0), 0);
     const totalImpressions = allPubs.reduce((s, p) => s + (p.impressions ?? 0), 0);
     const totalConversions = allPubs.reduce((s, p) => s + (p.conversions ?? 0), 0);
     const totalRevenue = allPubs.reduce((s, p) => s + (p.revenueBrl ?? 0), 0);
     const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    const totalEngagements = allPubs.reduce((sum, publication) => sum + (publication.likes ?? 0) + (publication.replies ?? 0) + (publication.reposts ?? 0) + (publication.quotes ?? 0) + (publication.shares ?? 0), 0);
+    const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
+    const averageViews = allPubs.length > 0 ? totalImpressions / allPubs.length : 0;
     const scalingCampaigns = a.campaigns.filter((c) => c.status === "scaling").length;
+    const publishedCampaigns = a.campaigns.filter((campaign) => campaign.publications.some((publication) => publication.status === "published")).length;
+    const activeCampaigns = a.campaigns.filter((campaign) => !["paused", "ended"].includes(campaign.status)).length;
     const hasAlert = a.campaigns.some((c) => c.status === "saturating");
 
     return {
@@ -78,7 +97,14 @@ async function getWorkspaceData(profileId: string) {
       totalConversions,
       totalRevenue,
       ctr,
+      totalEngagements,
+      engagementRate,
+      averageViews,
       campaignsCount: a.campaigns.length,
+      publishedCampaigns,
+      activeCampaigns,
+      scheduledPublications: everyPublication.filter((publication) => ["scheduled", "pending"].includes(publication.status)).length,
+      failedPublications: everyPublication.filter((publication) => publication.status === "failed").length,
       scalingCampaigns,
       hasAlert,
     };
@@ -88,13 +114,29 @@ async function getWorkspaceData(profileId: string) {
   const totalClicks = metrics.reduce((s, m) => s + m.totalClicks, 0);
   const totalConversions = metrics.reduce((s, m) => s + m.totalConversions, 0);
   const totalImpressions = metrics.reduce((s, m) => s + m.totalImpressions, 0);
+  const totalPublications = metrics.reduce((s, m) => s + m.totalPublications, 0);
+  const totalCampaigns = metrics.reduce((s, m) => s + m.campaignsCount, 0);
+  const publishedCampaigns = metrics.reduce((s, m) => s + m.publishedCampaigns, 0);
+  const totalEngagements = metrics.reduce((s, m) => s + m.totalEngagements, 0);
+  const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const latestMetricsSync = accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications)).reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
+  const dailyMap = new Map<string, { views: number; posts: number }>();
+  for (const publication of accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications))) {
+    if (publication.status !== "published" || !publication.publishedAt) continue;
+    const key = format(publication.publishedAt, "dd/MM");
+    const current = dailyMap.get(key) ?? { views: 0, posts: 0 };
+    current.views += publication.impressions ?? 0;
+    current.posts += 1;
+    dailyMap.set(key, current);
+  }
+  const dailyPerformance = [...dailyMap.entries()].map(([label, value]) => ({ label, ...value }));
 
-  const sorted = [...metrics].sort((a, b) => b.totalRevenue - a.totalRevenue);
+  const sorted = [...metrics].sort((a, b) => b.totalImpressions - a.totalImpressions || b.engagementRate - a.engagementRate);
   const bestAccount = sorted[0] ?? null;
   const worstAccount = sorted[sorted.length - 1] !== bestAccount ? sorted[sorted.length - 1] : null;
 
-  return { metrics, bestAccount, worstAccount, totals: { totalRevenue, totalClicks, totalConversions, totalImpressions, avgCtr } };
+  return { metrics, bestAccount, worstAccount, dailyPerformance, totals: { totalRevenue, totalClicks, totalConversions, totalImpressions, avgCtr, totalPublications, totalCampaigns, publishedCampaigns, totalEngagements, engagementRate, latestMetricsSync } };
 }
 
 function NetworkChip({ network }: { network: string }) {
@@ -129,11 +171,13 @@ function CtrDelta({ ctr }: { ctr: number }) {
   );
 }
 
-export default async function WorkspacePage() {
+export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   const session = await getSession();
   if (!session?.user.profile) return null;
 
-  const { metrics, bestAccount, worstAccount, totals } = await getWorkspaceData(session.user.profile.id);
+  const params = await searchParams;
+  const range = resolveDateRange(params.period, params.from, params.to);
+  const { metrics, bestAccount, worstAccount, dailyPerformance, totals } = await getWorkspaceData(session.user.profile.id, range);
 
   return (
     <div className="space-y-8">
@@ -149,8 +193,16 @@ export default async function WorkspacePage() {
         </Button>
       </div>
 
+      <div className="space-y-2">
+        <DateRangeFilter period={range.period} from={range.fromInput} to={range.toInput} />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+          <span>Comparação de posts publicados em: {range.label}.</span>
+          <span>{totals.latestMetricsSync ? `Última sincronização: ${format(totals.latestMetricsSync, "dd/MM/yyyy HH:mm")}` : "Aguardando primeira sincronização de métricas"}</span>
+        </div>
+      </div>
+
       {/* Global KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         {[
           {
             label: "Receita total",
@@ -161,28 +213,44 @@ export default async function WorkspacePage() {
             bg: "bg-emerald-600/10",
           },
           {
-            label: "Cliques",
-            value: formatNumber(totals.totalClicks),
-            sub: `${formatNumber(totals.totalImpressions)} impressões`,
-            icon: MousePointerClick,
+            label: "Visualizações",
+            value: formatNumber(totals.totalImpressions),
+            sub: totals.totalClicks > 0 ? `${formatNumber(totals.totalClicks)} cliques rastreados` : "cliques ainda não rastreados",
+            icon: Eye,
             color: "text-blue-400",
             bg: "bg-blue-600/10",
           },
           {
-            label: "CTR médio",
-            value: formatPercent(totals.avgCtr),
-            sub: totals.avgCtr >= 2 ? "acima da média" : totals.avgCtr > 0 ? "abaixo da média" : "sem dados",
-            icon: TrendingUp,
+            label: "Interações",
+            value: formatNumber(totals.totalEngagements),
+            sub: `${formatPercent(totals.engagementRate)} de engajamento`,
+            icon: Users,
             color: "text-amber-400",
             bg: "bg-amber-600/10",
           },
           {
+            label: "Posts publicados",
+            value: formatNumber(totals.totalPublications),
+            sub: "blocos enviados ao Threads",
+            icon: CheckCircle2,
+            color: "text-blue-400",
+            bg: "bg-blue-600/10",
+          },
+          {
+            label: "Campanhas publicadas",
+            value: String(totals.publishedCampaigns),
+            sub: `${totals.totalCampaigns} campanhas criadas`,
+            icon: BarChart3,
+            color: "text-pink-400",
+            bg: "bg-pink-600/10",
+          },
+          {
             label: "Contas ativas",
             value: String(metrics.length),
-            sub: `${metrics.reduce((s, m) => s + m.campaignsCount, 0)} campanhas`,
-            icon: BarChart3,
-            color: "text-violet-400",
-            bg: "bg-violet-600/10",
+            sub: "comparação individual disponível",
+            icon: Activity,
+            color: "text-cyan-400",
+            bg: "bg-cyan-600/10",
           },
         ].map((m) => (
           <Card key={m.label}>
@@ -199,6 +267,8 @@ export default async function WorkspacePage() {
           </Card>
         ))}
       </div>
+
+      <PerformanceChart data={dailyPerformance} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Comparison table */}
@@ -222,10 +292,11 @@ export default async function WorkspacePage() {
                       <tr className="border-b border-zinc-800 text-left">
                         <th className="px-5 py-3 text-zinc-500 font-medium">Conta</th>
                         <th className="px-3 py-3 text-zinc-500 font-medium">Narrador</th>
-                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">CTR</th>
-                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Conversão</th>
-                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Comissão</th>
-                        <th className="px-5 py-3 text-zinc-500 font-medium text-right">Publicações</th>
+                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Visualizações</th>
+                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Média/post</th>
+                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Engajamento</th>
+                        <th className="px-3 py-3 text-zinc-500 font-medium text-right">Campanhas</th>
+                        <th className="px-5 py-3 text-zinc-500 font-medium text-right">Posts</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50">
@@ -244,30 +315,29 @@ export default async function WorkspacePage() {
                                 )}
                               </div>
                               {m.id === bestAccount?.id && (
-                                <Badge variant="success" className="text-[9px] py-0">melhor</Badge>
+                                <Badge variant="success" className="text-[9px] py-0">mais alcance</Badge>
                               )}
-                              {m.id === worstAccount?.id && totals.totalRevenue > 0 && (
-                                <Badge variant="warning" className="text-[9px] py-0">menor CTR</Badge>
+                              {m.id === worstAccount?.id && totals.totalImpressions > 0 && (
+                                <Badge variant="warning" className="text-[9px] py-0">menor alcance</Badge>
                               )}
                             </div>
                           </td>
                           <td className="px-3 py-3.5">
                             {m.activeNarrator ? (
-                              <Link href={`/narradores/${m.activeNarrator.id}`} className="text-violet-400 hover:text-violet-300 underline underline-offset-2">
+                              <Link href={`/narradores/${m.activeNarrator.id}`} className="text-pink-400 hover:text-pink-300 underline underline-offset-2">
                                 {m.activeNarrator.name}
                               </Link>
                             ) : (
                               <span className="text-zinc-600">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-3.5 text-right">
-                            <CtrDelta ctr={m.ctr} />
-                          </td>
                           <td className="px-3 py-3.5 text-right text-zinc-300">
-                            {m.totalConversions > 0 ? formatNumber(m.totalConversions) : <span className="text-zinc-600">—</span>}
+                            {formatNumber(m.totalImpressions)}
                           </td>
-                          <td className="px-3 py-3.5 text-right text-emerald-400 font-medium">
-                            {m.totalRevenue > 0 ? formatCurrency(m.totalRevenue) : <span className="text-zinc-600">—</span>}
+                          <td className="px-3 py-3.5 text-right text-zinc-300">{formatNumber(Math.round(m.averageViews))}</td>
+                          <td className="px-3 py-3.5 text-right text-emerald-400 font-medium">{formatPercent(m.engagementRate)}</td>
+                          <td className="px-3 py-3.5 text-right text-zinc-300">
+                            {m.publishedCampaigns}/{m.campaignsCount}
                           </td>
                           <td className="px-5 py-3.5 text-right text-zinc-400">
                             {m.totalPublications}
@@ -299,21 +369,21 @@ export default async function WorkspacePage() {
                 </div>
                 {bestAccount.activeNarrator && (
                   <div className="flex items-center gap-2 text-xs text-zinc-400">
-                    <Users className="h-3 w-3 text-violet-400" />
+                    <Users className="h-3 w-3 text-pink-400" />
                     <span>Narrador: </span>
-                    <Link href={`/narradores/${bestAccount.activeNarrator.id}`} className="text-violet-400 underline underline-offset-2">
+                    <Link href={`/narradores/${bestAccount.activeNarrator.id}`} className="text-pink-400 underline underline-offset-2">
                       {bestAccount.activeNarrator.name}
                     </Link>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-2">
-                    <p className="text-[10px] text-zinc-500">CTR</p>
-                    <p className="text-sm font-bold text-emerald-400">{formatPercent(bestAccount.ctr)}</p>
+                    <p className="text-[10px] text-zinc-500">Visualizações</p>
+                    <p className="text-sm font-bold text-emerald-400">{formatNumber(bestAccount.totalImpressions)}</p>
                   </div>
                   <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-2">
-                    <p className="text-[10px] text-zinc-500">Comissão</p>
-                    <p className="text-sm font-bold text-emerald-400">{formatCurrency(bestAccount.totalRevenue)}</p>
+                    <p className="text-[10px] text-zinc-500">Engajamento</p>
+                    <p className="text-sm font-bold text-emerald-400">{formatPercent(bestAccount.engagementRate)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -324,7 +394,7 @@ export default async function WorkspacePage() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-violet-400" />
+                <Activity className="h-4 w-4 text-pink-400" />
                 <CardTitle className="text-base">Análise cruzada</CardTitle>
               </div>
             </CardHeader>
@@ -335,6 +405,17 @@ export default async function WorkspacePage() {
                 </p>
               ) : (
                 <div className="space-y-2">
+                  {(() => {
+                    const reach = [...metrics].sort((a, b) => b.totalImpressions - a.totalImpressions)[0];
+                    const engagement = [...metrics].sort((a, b) => b.engagementRate - a.engagementRate)[0];
+                    return (
+                      <div className="rounded-lg border border-blue-800/20 bg-blue-950/10 p-2.5">
+                        <p className="text-[10px] text-blue-400 mb-1">resumo comparativo</p>
+                        <p className="text-xs text-zinc-300"><strong>@{reach.username}</strong> lidera em alcance com {formatNumber(reach.totalImpressions)} visualizações.</p>
+                        <p className="text-xs text-zinc-400 mt-1"><strong>@{engagement.username}</strong> tem o maior engajamento: {formatPercent(engagement.engagementRate)}.</p>
+                      </div>
+                    );
+                  })()}
                   {/* Same narrator on different accounts */}
                   {(() => {
                     const narratorMap: Record<string, string[]> = {};
@@ -346,10 +427,10 @@ export default async function WorkspacePage() {
                     }
                     const sharedNarrators = Object.entries(narratorMap).filter(([, accs]) => accs.length > 1);
                     return sharedNarrators.map(([name, accs]) => (
-                      <div key={name} className="rounded-lg border border-violet-800/20 bg-violet-950/10 p-2.5">
-                        <p className="text-[10px] text-violet-400 mb-0.5">mesmo narrador</p>
+                      <div key={name} className="rounded-lg border border-pink-800/20 bg-pink-950/10 p-2.5">
+                        <p className="text-[10px] text-pink-400 mb-0.5">mesmo narrador</p>
                         <p className="text-xs text-zinc-300">
-                          <strong>{name}</strong> está ativo em {accs.join(" e ")} — compare o CTR para medir consistência.
+                          <strong>{name}</strong> está ativo em {accs.join(" e ")} — compare alcance e engajamento para medir consistência.
                         </p>
                       </div>
                     ));
@@ -410,7 +491,7 @@ export default async function WorkspacePage() {
                   {metrics.every((m) => m.totalRevenue === 0) && (
                     <div className="rounded-lg border border-zinc-800 p-2.5">
                       <p className="text-xs text-zinc-500">
-                        Sem dados de conversão ainda — as análises comparativas aparecerão conforme as publicações acumulam métricas.
+                        Conversões ainda não estão disponíveis. A comparação acima usa somente visualizações e interações reais do Threads.
                       </p>
                     </div>
                   )}

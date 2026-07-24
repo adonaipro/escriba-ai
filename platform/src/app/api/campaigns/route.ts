@@ -5,13 +5,24 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
-import { ACCOUNT_COOKIE } from "@/lib/account";
+import { ensureCampaignDailyJobs } from "@/lib/scheduling/recurrence";
+import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
 
-const CONTENT_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
+const EDITORIAL_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
+const CONTENT_MODES = [...EDITORIAL_MODES, "mix-editorial"] as const;
 type ContentModeValue = typeof CONTENT_MODES[number];
 
-function requiresProduct(mode?: ContentModeValue | null): boolean {
-  return !mode || mode === "story-produto" || mode === "story-organico";
+function requiresProduct(mode?: ContentModeValue | null, editorialModes?: readonly string[]): boolean {
+  return !mode || mode === "story-produto" || (mode === "mix-editorial" && !!editorialModes?.includes("story-produto"));
+}
+
+function completeTimes(input: string[], count: number): string[] {
+  const values = new Set(input.filter((time) => /^\d{2}:\d{2}$/.test(time)));
+  for (let index = 0; values.size < count && index < count * 3; index++) {
+    const minute = count === 1 ? 12 * 60 : Math.round((8 * 60 + (index % count) * (14 * 60) / (count - 1)) / 10) * 10;
+    values.add(`${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`);
+  }
+  return [...values].sort().slice(0, count);
 }
 
 const productSchema = z.object({
@@ -40,8 +51,12 @@ const createSchema = z.object({
   scheduleDays: z.array(z.number().int().min(0).max(6)).optional(),
   scheduleTimes: z.array(z.string()).optional(),
   contentMode: z.enum(CONTENT_MODES).optional().default("story-produto"),
+  editorialModes: z.array(z.enum(EDITORIAL_MODES)).min(1).max(5).optional(),
 }).superRefine((val, ctx) => {
-  if (requiresProduct(val.contentMode)) {
+  if (val.contentMode === "mix-editorial" && !val.editorialModes?.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selecione os formatos do Mix Editorial", path: ["editorialModes"] });
+  }
+  if (requiresProduct(val.contentMode, val.editorialModes)) {
     const products = val.products;
     if (products && products.length > 0) {
       // Validated by productSchema above
@@ -65,7 +80,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const status = searchParams.get("status");
-  const accountId = request.cookies.get(ACCOUNT_COOKIE)?.value ?? null;
+  const accountId = await getSelectedAccountId(session.user.profile.id);
 
   const campaigns = await prisma.campaign.findMany({
     where: {
@@ -114,7 +129,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = createSchema.parse(body);
-    const accountId = request.cookies.get(ACCOUNT_COOKIE)?.value ?? null;
 
     // Resolve product fields — prefer multi-product array, fall back to legacy fields
     const products = data.products && data.products.length > 0
@@ -132,13 +146,18 @@ export async function POST(request: NextRequest) {
       ? data.targetNetworks
       : [data.targetNetwork ?? "threads"];
     const primaryNetwork = targetNetworks[0] ?? "threads";
+    const accountId = await getPublishingAccountId(session.user.profile.id, primaryNetwork);
 
+    const resolvedScheduleTimes = data.approvalMode === "auto"
+      ? completeTimes(data.scheduleTimes ?? [], data.trendsPerDay)
+      : data.scheduleTimes ?? [];
     const customSchedule = JSON.stringify({
       contentMode: data.contentMode,
+      editorialModes: data.contentMode === "mix-editorial" ? data.editorialModes : [data.contentMode],
       products,
       targetNetworks,
       scheduleDays: data.scheduleDays ?? [1, 2, 3, 4, 5],
-      scheduleTimes: data.scheduleTimes ?? [],
+      scheduleTimes: resolvedScheduleTimes,
     });
 
     const campaign = await prisma.campaign.create({
@@ -173,12 +192,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const job = await prisma.generationJob.create({
-      data: { campaignId: campaign.id },
-    });
-    void processGenerationJob(job.id);
+    let jobs = await ensureCampaignDailyJobs(campaign.id);
+    if (jobs.length === 0) {
+      jobs = await prisma.$transaction(
+        Array.from({ length: data.trendsPerDay }, () =>
+          prisma.generationJob.create({ data: { campaignId: campaign.id } }),
+        ),
+      );
+    }
+    void (async () => {
+      for (const generationJob of jobs) await processGenerationJob(generationJob.id);
+    })();
 
-    return NextResponse.json({ campaign, jobId: job.id }, { status: 201 });
+    return NextResponse.json({ campaign, jobId: jobs[0]?.id, jobIds: jobs.map((generationJob) => generationJob.id) }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });

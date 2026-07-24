@@ -88,7 +88,7 @@ const EVENT_DOT: Record<EventType, string> = {
   publication_scheduled: "bg-blue-400",
   scale_opportunity: "bg-emerald-500 ring-1 ring-emerald-300",
   saturation_alert: "bg-amber-400",
-  learning: "bg-violet-400",
+  learning: "bg-pink-400",
 };
 
 const EVENT_ICON: Record<EventType, React.ComponentType<{ className?: string }>> = {
@@ -307,7 +307,7 @@ export default function CalendarioPage() {
           onClick={() => setTopView("calendario")}
           className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
             topView === "calendario"
-              ? "bg-violet-600 text-white"
+              ? "bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 text-white"
               : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
           }`}
         >
@@ -317,7 +317,7 @@ export default function CalendarioPage() {
           onClick={() => setTopView("fila")}
           className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
             topView === "fila"
-              ? "bg-violet-600 text-white"
+              ? "bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 text-white"
               : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
           }`}
         >
@@ -505,7 +505,7 @@ export default function CalendarioPage() {
               { dot: "bg-blue-400", label: "Agendado" },
               { dot: "bg-emerald-500 ring-1 ring-emerald-300", label: "Oportunidade de escala" },
               { dot: "bg-amber-400", label: "Alerta de saturacao" },
-              { dot: "bg-violet-400", label: "Padrao detectado" },
+              { dot: "bg-pink-400", label: "Padrao detectado" },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full shrink-0 ${item.dot}`} />
@@ -576,12 +576,12 @@ export default function CalendarioPage() {
                         key={dateKey}
                         onClick={() => setSelectedDay(isSelected ? null : dateKey)}
                         className={`min-h-[80px] border-b border-r border-zinc-800/50 p-2 text-left transition-colors ${
-                          isSelected ? "bg-violet-600/10" : "hover:bg-zinc-800/30"
+                          isSelected ? "bg-pink-600/10" : "hover:bg-zinc-800/30"
                         } ${!isSameMonth(day, currentMonth) ? "opacity-30" : ""}`}
                       >
                         <div
                           className={`text-sm font-medium mb-1.5 w-7 h-7 flex items-center justify-center rounded-full ${
-                            isCurrentDay ? "bg-violet-600 text-white" : "text-zinc-300"
+                            isCurrentDay ? "bg-gradient-to-br from-pink-500 to-orange-500 text-white" : "text-zinc-300"
                           }`}
                         >
                           {format(day, "d")}
@@ -644,7 +644,7 @@ export default function CalendarioPage() {
                                   : ev.type === "saturation_alert"
                                   ? "bg-amber-950/10 rounded px-2"
                                   : ev.type === "learning"
-                                  ? "bg-violet-950/10 rounded px-2"
+                                  ? "bg-pink-950/10 rounded px-2"
                                   : ""
                               }`}
                             >
@@ -656,7 +656,7 @@ export default function CalendarioPage() {
                                         ? "text-emerald-400"
                                         : ev.type === "saturation_alert"
                                         ? "text-amber-400"
-                                        : "text-violet-400"
+                                        : "text-pink-400"
                                     }`}
                                   />
                                 ) : (
@@ -740,7 +740,7 @@ export default function CalendarioPage() {
                               : ev.type === "saturation_alert"
                               ? "border-amber-800/40"
                               : ev.type === "learning"
-                              ? "border-violet-800/40"
+                              ? "border-pink-800/40"
                               : ""
                           }
                         >
@@ -755,7 +755,7 @@ export default function CalendarioPage() {
                             ) : ev.type === "saturation_alert" ? (
                               <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                             ) : (
-                              <Brain className="h-4 w-4 text-violet-400 shrink-0 mt-0.5" />
+                              <Brain className="h-4 w-4 text-pink-400 shrink-0 mt-0.5" />
                             )}
                             <div className="flex-1 min-w-0">
                               {ev.pubData && (

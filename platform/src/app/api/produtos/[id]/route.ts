@@ -123,3 +123,21 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+// DELETE /api/produtos/[id] — remove from catalog without deleting campaign history
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getSession();
+  if (!session?.user.profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  const existing = await prisma.product.findFirst({ where: { id, profileId: session.user.profile.id } });
+  if (!existing) return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 });
+
+  await prisma.$transaction([
+    prisma.campaign.updateMany({ where: { productId: id }, data: { productId: null } }),
+    prisma.product.delete({ where: { id } }),
+  ]);
+  return NextResponse.json({ deleted: true });
+}

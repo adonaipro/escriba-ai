@@ -40,7 +40,7 @@ function getEntityVoice(ev: NotifEvent): string {
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
   created: <Plus className="h-3.5 w-3.5 text-zinc-400" />,
-  generated: <Sparkles className="h-3.5 w-3.5 text-violet-400" />,
+  generated: <Sparkles className="h-3.5 w-3.5 text-pink-400" />,
   win: <Trophy className="h-3.5 w-3.5 text-emerald-400" />,
   scheduled: <Calendar className="h-3.5 w-3.5 text-blue-400" />,
   published: <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />,
@@ -103,7 +103,7 @@ export function NotificationBell() {
         <Button variant="ghost" size="icon" className="relative text-zinc-400 hover:text-zinc-100">
           <Bell className="h-4 w-4" />
           {badgeCount > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-[10px] font-bold text-white">
+            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white">
               {badgeCount > 9 ? "9+" : badgeCount}
             </span>
           )}
@@ -116,8 +116,8 @@ export function NotificationBell() {
       >
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-          <Sparkles className="h-4 w-4 text-violet-400" />
-          <span className="text-xs font-semibold tracking-widest text-violet-300 uppercase">
+          <Sparkles className="h-4 w-4 text-pink-400" />
+          <span className="text-xs font-semibold tracking-widest text-pink-300 uppercase">
             A Entidade
           </span>
         </div>
@@ -148,7 +148,7 @@ export function NotificationBell() {
                     <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
                       {ev.campaign.productName}
                     </p>
-                    <p className="mt-1.5 text-[11px] leading-snug text-violet-300/80 italic">
+                    <p className="mt-1.5 text-[11px] leading-snug text-pink-300/80 italic">
                       &ldquo;{getEntityVoice(ev)}&rdquo;
                     </p>
                   </div>

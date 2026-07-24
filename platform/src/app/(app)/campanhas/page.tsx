@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Megaphone, Info } from "lucide-react";
+import { Plus, Megaphone, Info, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,12 +112,19 @@ function StateTooltip({ status }: { status: string }) {
 
 // --- Campaign card ---
 
-function CampaignCard({ campaign }: { campaign: CampaignData }) {
+function CampaignCard({ campaign, onDeleted }: { campaign: CampaignData; onDeleted: (id: string) => void }) {
   const { clicks: totalClicks, impressions: totalImpressions, revenue: totalRevenue, ctr } = campaign.metrics;
   const meta = STATE_META[campaign.status] ?? STATE_META.testing;
 
+  async function removeCampaign() {
+    if (!window.confirm(`Excluir a campanha “${campaign.name}” e seus agendamentos?`)) return;
+    const response = await fetch(`/api/campaigns/${campaign.id}`, { method: "DELETE" });
+    if (response.ok) onDeleted(campaign.id);
+  }
+
   return (
-    <Link href={`/campanhas/${campaign.id}`}>
+    <div className="relative">
+      <Link href={`/campanhas/${campaign.id}`}>
       <Card className="hover:border-zinc-700 transition-colors cursor-pointer group">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4 mb-4">
@@ -153,7 +160,7 @@ function CampaignCard({ campaign }: { campaign: CampaignData }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+          <div className="flex items-center justify-between mt-4 pt-3 pr-9 border-t border-zinc-800">
             <div className="flex gap-3 text-xs text-zinc-500">
               <span>{campaign.metrics.trendsCount} trend{campaign.metrics.trendsCount !== 1 ? "s" : ""}</span>
               <span>{campaign.metrics.publicationsCount} publicacoes</span>
@@ -164,7 +171,11 @@ function CampaignCard({ campaign }: { campaign: CampaignData }) {
           </div>
         </CardContent>
       </Card>
-    </Link>
+      </Link>
+      <button type="button" onClick={() => void removeCampaign()} aria-label="Excluir campanha" className="absolute bottom-3 right-3 z-10 rounded-md p-2 text-zinc-600 hover:bg-red-950/40 hover:text-red-400">
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
@@ -279,7 +290,7 @@ export default function CampanhasPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {filtered.map((c) => (
-                <CampaignCard key={c.id} campaign={c} />
+                <CampaignCard key={c.id} campaign={c} onDeleted={(id) => setCampaigns((current) => current.filter((campaign) => campaign.id !== id))} />
               ))}
             </div>
           )}

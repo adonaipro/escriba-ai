@@ -5,6 +5,7 @@ import { selectHypothesisValue } from "./narrators/hypothesis-engine";
 import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
 import { buildNarrativeLLM } from "./llm/narrative-engine";
 import type { ContentMode } from "./llm/pipeline-types";
+import { assertThreadsPostsWithinLimit } from "./publishing/threads-limits";
 
 type HypothesisDimension = "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType";
 const DIMENSIONS: HypothesisDimension[] = ["tone", "rhythm", "productStrategy", "questionType", "conflictType", "openingStyle", "structureType"];
@@ -304,6 +305,9 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       openingStyle: generated.openingStyle, conflictType: generated.conflictType,
       questionType: generated.questionType, posts: generated.posts,
     };
+
+    // Refuse to persist/schedule Threads-oversized posts (no silent truncate)
+    assertThreadsPostsWithinLimit(output.posts);
 
     await updateJob(jobId, {
       status: "writing",

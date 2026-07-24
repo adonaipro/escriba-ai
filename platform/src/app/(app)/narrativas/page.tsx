@@ -1,34 +1,75 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { Library, TrendingUp, Users, MapPin, Package, Heart, Zap, Lightbulb, Music2, Gauge, ShoppingBag, MessageCircle, Layers } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Brain,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Heart,
+  Users,
+  Zap,
+  MapPin,
+  Library,
+  Lightbulb,
+  Music2,
+  Gauge,
+  ShoppingBag,
+  MessageCircle,
+  Layers,
+  Package,
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { getSelectedAccountId } from "@/lib/account";
 
-const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string; bg: string; description: string }> = {
-  emotion:        { label: "Emoções",             icon: Heart,       color: "text-pink-400",    bg: "bg-pink-600/10",    description: "A emoção dominante que entra primeiro — antes da história" },
-  role:           { label: "Papéis Sociais",      icon: Users,       color: "text-blue-400",    bg: "bg-blue-600/10",    description: "Quem aparece na história: minha sogra, meu marido, minha diarista" },
-  conflictObject: { label: "Objetos de Conflito", icon: Zap,         color: "text-amber-400",   bg: "bg-amber-600/10",   description: "O objeto cotidiano que inicia o conflito: interfone, Pix, controle remoto" },
-  sceneMoment:    { label: "Momentos de Cena",    icon: MapPin,      color: "text-emerald-400", bg: "bg-emerald-600/10", description: "Quando acontece: sábado de manhã, domingo de almoço" },
-  family:         { label: "Famílias Narrativas", icon: Library,     color: "text-violet-400",  bg: "bg-violet-600/10",  description: "A arquitetura profunda da história" },
-  moralQuestion:  { label: "Perguntas Morais",    icon: Lightbulb,   color: "text-cyan-400",    bg: "bg-cyan-600/10",    description: "A pergunta final que divide opiniões e gera comentários" },
-  setting:        { label: "Cenários",            icon: MapPin,      color: "text-teal-400",    bg: "bg-teal-600/10",    description: "O espaço físico onde a cena acontece" },
-  character:      { label: "Personagens (legado)", icon: Users,      color: "text-zinc-400",    bg: "bg-zinc-600/10",    description: "Registros de gerações anteriores" },
-  object:         { label: "Objetos (legado)",    icon: Package,     color: "text-zinc-400",    bg: "bg-zinc-600/10",    description: "Registros de gerações anteriores" },
-  // Narrator experiment dimensions
-  tone:           { label: "Tom Narrativo",        icon: Music2,      color: "text-rose-400",    bg: "bg-rose-600/10",    description: "Emocional, objetivo, reflexivo, leve ou intenso — testado por narrador" },
-  rhythm:         { label: "Ritmo",                icon: Gauge,       color: "text-orange-400",  bg: "bg-orange-600/10",  description: "Velocidade da narrativa: rápido, médio ou lento" },
-  productStrategy:{ label: "Estratégia de Produto",icon: ShoppingBag, color: "text-indigo-400",  bg: "bg-indigo-600/10",  description: "Como o produto entra: Clickbait, Contextual ou Híbrida" },
-  questionType:   { label: "Tipo de Pergunta",     icon: MessageCircle, color: "text-sky-400",   bg: "bg-sky-600/10",     description: "A pergunta final que gera engajamento" },
-  openingStyle:   { label: "Estilo de Abertura",   icon: Zap,         color: "text-yellow-400",  bg: "bg-yellow-600/10",  description: "Como a história começa: ação direta, contexto primeiro ou emoção primeiro" },
-  conflictType:   { label: "Tipo de Conflito",     icon: Layers,      color: "text-red-400",     bg: "bg-red-600/10",     description: "Familiar, financeiro, relacionamento, trabalho ou cotidiano" },
-  structureType:  { label: "Estrutura",            icon: Library,     color: "text-fuchsia-400", bg: "bg-fuchsia-600/10", description: "Arquitetura da história: escadaria, flash, reflexão ou decisão" },
+// ─── Dimension metadata ───────────────────────────────────────────────────────
+
+const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
+  emotion:         { label: "Emoção",             icon: Heart,          color: "text-pink-400",    bg: "bg-pink-600/10" },
+  role:            { label: "Papel Social",        icon: Users,          color: "text-blue-400",    bg: "bg-blue-600/10" },
+  conflictObject:  { label: "Objeto de Conflito",  icon: Zap,            color: "text-amber-400",   bg: "bg-amber-600/10" },
+  sceneMoment:     { label: "Momento de Cena",     icon: MapPin,         color: "text-emerald-400", bg: "bg-emerald-600/10" },
+  family:          { label: "Família Narrativa",   icon: Library,        color: "text-pink-400",  bg: "bg-pink-600/10" },
+  moralQuestion:   { label: "Pergunta Moral",      icon: Lightbulb,      color: "text-cyan-400",    bg: "bg-cyan-600/10" },
+  setting:         { label: "Cenário",             icon: MapPin,         color: "text-teal-400",    bg: "bg-teal-600/10" },
+  tone:            { label: "Tom",                 icon: Music2,         color: "text-rose-400",    bg: "bg-rose-600/10" },
+  rhythm:          { label: "Ritmo",               icon: Gauge,          color: "text-orange-400",  bg: "bg-orange-600/10" },
+  productStrategy: { label: "Estratégia",          icon: ShoppingBag,    color: "text-indigo-400",  bg: "bg-indigo-600/10" },
+  questionType:    { label: "Tipo de Pergunta",    icon: MessageCircle,  color: "text-sky-400",     bg: "bg-sky-600/10" },
+  openingStyle:    { label: "Abertura",            icon: Zap,            color: "text-yellow-400",  bg: "bg-yellow-600/10" },
+  conflictType:    { label: "Tipo de Conflito",    icon: Layers,         color: "text-red-400",     bg: "bg-red-600/10" },
+  structureType:   { label: "Estrutura",           icon: Library,        color: "text-fuchsia-400", bg: "bg-fuchsia-600/10" },
+  character:       { label: "Personagem",          icon: Users,          color: "text-zinc-400",    bg: "bg-zinc-600/10" },
+  object:          { label: "Objeto",              icon: Package,        color: "text-zinc-400",    bg: "bg-zinc-600/10" },
 };
 
-export default async function NarrativasPage() {
+// Canonical order for dimension sections
+const TYPE_ORDER = [
+  "emotion", "role", "conflictObject", "sceneMoment", "family", "moralQuestion",
+  "setting", "tone", "rhythm", "productStrategy", "questionType", "openingStyle",
+  "conflictType", "structureType", "character", "object",
+];
+
+// ─── Classification helpers ───────────────────────────────────────────────────
+
+function winRate(p: { evaluatedCount: number; winCount: number }) {
+  return p.evaluatedCount > 0 ? p.winCount / p.evaluatedCount : 0;
+}
+
+function classify(p: { evaluatedCount: number; winCount: number }): "amplifier" | "suppressor" | "exploring" {
+  if (p.evaluatedCount >= 3 && winRate(p) >= 0.6) return "amplifier";
+  if (p.evaluatedCount >= 4 && winRate(p) <= 0.25) return "suppressor";
+  return "exploring";
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default async function AprendizadosPage() {
   const session = await getSession();
   if (!session?.user.profile) return null;
+  const accountId = await getSelectedAccountId(session.user.profile.id);
 
   const patterns = await prisma.narrativePattern.findMany({
-    where: { profileId: session.user.profile.id },
+    where: { profileId: session.user.profile.id, socialAccountId: accountId ?? "__no_selected_account__" },
     orderBy: [{ winCount: "desc" }, { usageCount: "desc" }],
   });
 
@@ -38,157 +79,238 @@ export default async function NarrativasPage() {
     byType[p.type].push(p);
   }
 
-  const totalUsage = patterns.reduce((s, p) => s + p.usageCount, 0);
-  const totalTypes = Object.keys(byType).length;
-  const topPattern = patterns[0];
+  const [evaluatedStories, publicationMetrics] = await Promise.all([
+    prisma.trend.count({ where: { campaign: { profileId: session.user.profile.id, socialAccountId: accountId ?? "__no_selected_account__" }, metricsEvaluatedAt: { not: null } } }),
+    prisma.publication.aggregate({
+      where: { campaign: { profileId: session.user.profile.id, socialAccountId: accountId ?? "__no_selected_account__" }, status: "published" },
+      _sum: { impressions: true, likes: true, replies: true, reposts: true, quotes: true, shares: true },
+    }),
+  ]);
+  const totalViews = publicationMetrics._sum.impressions ?? 0;
+  const totalEngagements = (publicationMetrics._sum.likes ?? 0) + (publicationMetrics._sum.replies ?? 0) +
+    (publicationMetrics._sum.reposts ?? 0) + (publicationMetrics._sum.quotes ?? 0) + (publicationMetrics._sum.shares ?? 0);
+  const amplifiers  = patterns.filter((p) => classify(p) === "amplifier");
+  const suppressors = patterns.filter((p) => classify(p) === "suppressor");
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Biblioteca Narrativa</h1>
+        <h1 className="text-2xl font-bold text-zinc-100">Aprendizados</h1>
         <p className="text-sm text-zinc-400">
-          O que a Entidade aprendeu a contar — cada elemento nasce do uso real e evolui com os resultados
+          O que a Entidade descobriu sobre o que funciona — e o que não funciona — para sua audiência
         </p>
       </div>
 
-      {/* KPI */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { label: "Elementos registrados", value: patterns.length },
-          { label: "Categorias descobertas", value: totalTypes },
-          { label: "Gerações totais", value: totalUsage },
-          { label: "Elemento vencedor", value: topPattern?.value ?? "—", small: true },
+          { label: "Histórias avaliadas",   value: evaluatedStories,   icon: Brain,        color: "text-zinc-300",   bg: "bg-zinc-700/40" },
+          { label: "Amplificadores",         value: amplifiers.length,  icon: TrendingUp,   color: "text-emerald-400", bg: "bg-emerald-600/10" },
+          { label: "Supressores",            value: suppressors.length, icon: TrendingDown, color: "text-red-400",    bg: "bg-red-600/10" },
+          { label: "Visualizações coletadas", value: totalViews,        icon: Zap,          color: "text-pink-400", bg: "bg-pink-600/10" },
         ].map((s) => (
           <Card key={s.label}>
-            <CardContent className="p-4">
-              <p className="text-xs text-zinc-500 mb-1">{s.label}</p>
-              <p className={`font-bold text-zinc-100 ${s.small ? "text-sm mt-1.5" : "text-2xl"}`}>
-                {s.value}
-              </p>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={`rounded-lg p-2 shrink-0 ${s.bg}`}>
+                <s.icon className={`h-5 w-5 ${s.color}`} />
+              </div>
+              <div>
+                <p className="text-xs text-zinc-400">{s.label}</p>
+                <p className="text-xl font-bold text-zinc-100">{s.value}</p>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* AI voice */}
-      {patterns.length === 0 ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 py-20 text-center">
-          <Library className="h-12 w-12 text-zinc-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-zinc-300 mb-2">Biblioteca ainda vazia</h3>
-          <p className="text-sm text-zinc-500 max-w-sm mx-auto">
-            A biblioteca cresce automaticamente conforme a Entidade gera narrativas.
-            Crie sua primeira campanha para começar.
+      {/* Empty state */}
+      {patterns.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 py-20">
+          <Brain className="h-12 w-12 text-zinc-600 mb-4" />
+          <h3 className="text-lg font-semibold text-zinc-300 mb-2">
+            A Entidade ainda não tem dados suficientes
+          </h3>
+          <p className="text-sm text-zinc-500 text-center max-w-sm">
+            Os aprendizados crescem automaticamente conforme você gera narrativas no Laboratório
+            e acompanha resultados nas Campanhas.
           </p>
         </div>
-      ) : (
+      )}
+
+      {patterns.length > 0 && (
         <>
-          <div className="rounded-lg border border-l-2 border-violet-800/30 border-l-violet-500 bg-zinc-900/50 p-4">
-            <p className="text-xs text-violet-400 font-mono mb-2 tracking-wide">A ENTIDADE</p>
+          {/* Entidade voice */}
+          <div className="rounded-lg border border-l-2 border-pink-800/30 border-l-pink-500 bg-zinc-900/50 p-4">
+            <p className="text-xs text-pink-400 font-mono mb-2 tracking-wide">A ENTIDADE</p>
             <p className="text-sm text-zinc-300 font-mono leading-relaxed">
-              {patterns.length === 1
-                ? `Registrei meu primeiro elemento: "${patterns[0].value}". A história começa aqui.`
-                : (() => {
-                    const winners = patterns.filter((p) => p.winCount > 0);
-                    const roles = byType["role"] ?? [];
-                    const emotions = byType["emotion"] ?? [];
-                    return `Aprendi ${patterns.length} elementos em ${totalTypes} dimensões. ${
-                      winners.length > 0
-                        ? `${winners.length} deles já venceram — estou priorizando.`
-                        : "Ainda sem vencedores. Preciso de mais dados de performance."
-                    }${roles.length > 0 ? ` Conheço ${roles.length} papel${roles.length > 1 ? "is" : ""} social${roles.length > 1 ? "is" : ""}.` : ""}${emotions.length > 0 ? ` Domino ${emotions.length} emoção${emotions.length > 1 ? "ões" : ""}.` : ""} ${
-                      topPattern?.winCount
-                        ? `Meu elemento mais eficaz: "${topPattern.value}".`
-                        : "Cada história que conto adiciona camadas ao que sei."
-                    }`;
-                  })()}
+              {evaluatedStories === 0
+                ? "Ainda não há histórias com dados suficientes. Estou coletando visualizações e interações do Threads; nenhum elemento será classificado antes de existir evidência real."
+                : `Analisei ${evaluatedStories} história${evaluatedStories > 1 ? "s" : ""}, com ${totalViews} visualizações e ${totalEngagements} interações. ${
+                    amplifiers.length > 0
+                      ? `Encontrei ${amplifiers.length} amplificador${amplifiers.length > 1 ? "es" : ""} — elemento${amplifiers.length > 1 ? "s" : ""} que consistentemente ${amplifiers.length > 1 ? "geram" : "gera"} resultado.`
+                      : ""
+                  }${
+                    suppressors.length > 0
+                      ? ` Identifiquei ${suppressors.length} supressor${suppressors.length > 1 ? "es" : ""} — estou evitando ${suppressors.length > 1 ? "eles" : "ele"} nas próximas gerações.`
+                      : ""
+                  }`
+              }
             </p>
           </div>
 
-          {/* By type */}
-          <div className="space-y-6">
-            {Object.entries(TYPE_META)
-              .filter(([type]) => byType[type]?.length > 0)
-              .map(([type, meta]) => {
-                const items = byType[type] ?? [];
+          {/* ── AMPLIFICADORES ──────────────────────────────────────────────── */}
+          {amplifiers.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-400" />
+                <h2 className="text-sm font-semibold text-zinc-200">
+                  Amplificadores — o que gera resultado
+                </h2>
+                <span className="text-xs text-zinc-600">{amplifiers.length}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {amplifiers.map((p) => {
+                  const meta = TYPE_META[p.type];
+                  const wr = Math.round(winRate(p) * 100);
+                  const avgCtr = p.evaluatedCount > 0 ? p.totalCtr / p.evaluatedCount : 0;
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-lg border border-emerald-800/40 bg-emerald-950/10 p-3 flex items-start gap-3"
+                    >
+                      {meta && (
+                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
+                          <meta.icon className={`h-3.5 w-3.5 ${meta.color}`} />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-100 leading-tight">{p.value}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">
+                          {meta?.label ?? p.type}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1.5 text-[10px]">
+                          <span className="text-emerald-400 font-medium">{wr}% vitórias</span>
+                          <span className="text-zinc-500">{p.evaluatedCount} avaliações</span>
+                          {avgCtr > 0 && <span className="text-zinc-400">{avgCtr.toFixed(1)}% engajamento</span>}
+                        </div>
+                      </div>
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── SUPRESSORES ─────────────────────────────────────────────────── */}
+          {suppressors.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-400" />
+                <h2 className="text-sm font-semibold text-zinc-200">
+                  Supressores — o que não gera resultado
+                </h2>
+                <span className="text-xs text-zinc-600">{suppressors.length}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {suppressors.map((p) => {
+                  const meta = TYPE_META[p.type];
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-lg border border-red-800/30 bg-red-950/10 p-3 flex items-start gap-3 opacity-80"
+                    >
+                      {meta && (
+                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
+                          <meta.icon className={`h-3.5 w-3.5 ${meta.color}`} />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-300 leading-tight">{p.value}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{meta?.label ?? p.type}</p>
+                        <p className="text-[10px] text-red-400/70 mt-1">{p.evaluatedCount} avaliações · {p.winCount} acima da mediana</p>
+                      </div>
+                      <TrendingDown className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── POR DIMENSÃO — tudo que está em descoberta ──────────────────── */}
+          <div className="space-y-5">
+            <div className="flex items-center gap-2">
+              <Minus className="h-4 w-4 text-zinc-500" />
+              <h2 className="text-sm font-semibold text-zinc-200">Em descoberta</h2>
+              <span className="text-xs text-zinc-600">elementos aguardando dados suficientes</span>
+            </div>
+
+            {TYPE_ORDER
+              .filter((type) => byType[type]?.some((p) => classify(p) === "exploring"))
+              .map((type) => {
+                const meta = TYPE_META[type];
+                const items = (byType[type] ?? []).filter((p) => classify(p) === "exploring");
+                if (items.length === 0 || !meta) return null;
                 const maxUsage = Math.max(...items.map((i) => i.usageCount), 1);
                 const Icon = meta.icon;
 
                 return (
                   <div key={type}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${meta.bg}`}>
-                        <Icon className={`h-4 w-4 ${meta.color}`} />
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`flex h-6 w-6 items-center justify-center rounded-md ${meta.bg}`}>
+                        <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
                       </div>
-                      <h2 className="text-sm font-semibold text-zinc-200">{meta.label}</h2>
-                      <span className="text-xs text-zinc-600">{items.length} elementos</span>
+                      <span className="text-xs font-semibold text-zinc-400">{meta.label}</span>
+                      <span className="text-xs text-zinc-700">{items.length}</span>
                     </div>
-                    {meta.description && (
-                      <p className="text-xs text-zinc-600 mb-3 ml-9">{meta.description}</p>
-                    )}
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {items.map((p) => {
-                        const avgCtr = p.usageCount > 0 ? p.totalCtr / p.usageCount : 0;
-                        const winRate = p.usageCount > 0 ? (p.winCount / p.usageCount) * 100 : 0;
-                        const isWinner = p.winCount > 0 && winRate > 50;
-
-                        return (
-                          <div
-                            key={p.id}
-                            className={`rounded-lg border p-3 ${
-                              isWinner
-                                ? "border-emerald-800/40 bg-emerald-950/10"
-                                : "border-zinc-800 bg-zinc-900/40"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <span className="text-sm font-medium text-zinc-200 leading-tight">
-                                {p.value}
-                              </span>
-                              {isWinner && (
-                                <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-zinc-500">
-                              <span>{p.usageCount}× usado</span>
-                              {p.winCount > 0 && (
-                                <span className="text-emerald-400">{p.winCount} vitória{p.winCount > 1 ? "s" : ""}</span>
-                              )}
-                              {avgCtr > 0 && (
-                                <span className="text-zinc-400">CTR médio {avgCtr.toFixed(2)}%</span>
-                              )}
-                            </div>
-                            <div className="mt-2 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                      {items.map((p) => (
+                        <div
+                          key={p.id}
+                          className="rounded-lg border border-zinc-800/60 bg-zinc-900/30 px-3 py-2 flex items-center justify-between gap-2"
+                        >
+                          <span className="text-xs text-zinc-300 leading-tight flex-1 min-w-0 truncate">
+                            {p.value}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="w-16 h-1 rounded-full bg-zinc-800 overflow-hidden">
                               <div
-                                className={`h-full rounded-full transition-all ${
-                                  isWinner ? "bg-emerald-500" : "bg-violet-500/50"
-                                }`}
+                                className="h-full rounded-full bg-pink-500/40"
                                 style={{ width: `${(p.usageCount / maxUsage) * 100}%` }}
                               />
                             </div>
+                            <span className="text-[10px] text-zinc-600 font-mono w-16 text-right">
+                              {p.evaluatedCount > 0 ? `${p.evaluatedCount} aval.` : "sem dados"}
+                            </span>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
               })}
 
-            {/* Other types not in TYPE_META — show as simple tags */}
+            {/* Unknown types not in TYPE_META */}
             {Object.entries(byType)
               .filter(([type]) => !TYPE_META[type])
-              .map(([type, items]) => (
-                <div key={type}>
-                  <h2 className="text-xs font-semibold text-zinc-600 mb-2 uppercase tracking-widest">{type}</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {items.map((p) => (
-                      <span key={p.id} className="text-xs px-2 py-1 rounded border border-zinc-800/50 text-zinc-600">
-                        {p.value} ({p.usageCount}×)
-                      </span>
-                    ))}
+              .map(([type, items]) => {
+                const exploring = items.filter((p) => classify(p) === "exploring");
+                if (exploring.length === 0) return null;
+                return (
+                  <div key={type}>
+                    <span className="text-xs font-semibold text-zinc-600 uppercase tracking-widest">{type}</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {exploring.map((p) => (
+                        <span key={p.id} className="text-xs px-2 py-1 rounded border border-zinc-800/50 text-zinc-600">
+                          {p.value} ({p.usageCount}×)
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </>
       )}

@@ -25,6 +25,8 @@ export async function GET(
   const campaign = await prisma.campaign.findFirst({
     where: { id, profileId: session.user.profile.id },
     include: {
+      socialAccount: { select: { id: true, username: true, network: true, isMock: true } },
+      narrator: { select: { id: true, name: true } },
       trends: {
         orderBy: { createdAt: "desc" },
         take: 20,
@@ -96,4 +98,30 @@ export async function PATCH(
     }
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session?.user.profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  const campaign = await prisma.campaign.findFirst({
+    where: { id, profileId: session.user.profile.id }, select: { id: true },
+  });
+  if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.$transaction(async (tx) => {
+    const trends = await tx.trend.findMany({ where: { campaignId: id }, select: { id: true } });
+    const trendIds = trends.map((trend) => trend.id);
+    await tx.publication.deleteMany({ where: { campaignId: id } });
+    await tx.trendPost.deleteMany({ where: { trendId: { in: trendIds } } });
+    await tx.trend.deleteMany({ where: { campaignId: id } });
+    await tx.generationJob.deleteMany({ where: { campaignId: id } });
+    await tx.campaignEvent.deleteMany({ where: { campaignId: id } });
+    await tx.learning.deleteMany({ where: { campaignId: id } });
+    await tx.campaign.delete({ where: { id } });
+  });
+  return NextResponse.json({ deleted: true });
 }

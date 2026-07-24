@@ -1,0 +1,9 @@
+[Unit]
+Description=Escriba AI publication runner
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/escriba-publisher
+

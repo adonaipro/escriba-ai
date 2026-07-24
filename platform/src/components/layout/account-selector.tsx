@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, Plus, ChevronDown, Check, Loader2 } from "lucide-react";
+import { BarChart3, Plus, ChevronDown, Check, Loader2, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
     network: string;
     username: string | null;
     displayName: string | null;
+    avatarUrl: string | null;
     status: string;
     isMock: boolean;
     activeNarrator?: { id: string; name: string } | null;
@@ -61,6 +62,7 @@ export function AccountSelector({ accounts, selectedAccountId }: Props) {
 
   const selectedAccount =
     accounts.find((a) => a.id === selectedAccountId) ?? null;
+  const hasAccount = accounts.length > 0;
 
   // Close dropdown when clicking outside the component
   useEffect(() => {
@@ -92,6 +94,24 @@ export function AccountSelector({ accounts, selectedAccountId }: Props) {
     }
   }
 
+  // When no account exists, render a direct link to /integracoes — no dropdown needed
+  if (!hasAccount) {
+    return (
+      <Link
+        href="/integracoes"
+        className="flex w-full items-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 px-3 py-2 text-left transition-colors hover:border-pink-700/50 hover:bg-pink-950/20"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800">
+          <Link2 className="h-3.5 w-3.5 text-zinc-500" />
+        </span>
+        <span className="flex-1 truncate text-xs text-zinc-400 group-hover:text-zinc-200">
+          Conectar conta
+        </span>
+        <Plus className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
+      </Link>
+    );
+  }
+
   return (
     <div ref={containerRef} className="relative">
       {/* Trigger button */}
@@ -105,8 +125,11 @@ export function AccountSelector({ accounts, selectedAccountId }: Props) {
         )}
       >
         {/* Avatar circle */}
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-600/20 text-xs font-semibold text-violet-300">
-          {selectedAccount
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-pink-600/20 text-xs font-semibold text-pink-300">
+          {selectedAccount?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={selectedAccount.avatarUrl} alt={`@${selectedAccount.username ?? "conta"}`} className="h-full w-full object-cover" />
+          ) : selectedAccount
             ? getAvatarLetters(
                 selectedAccount.displayName,
                 selectedAccount.username
@@ -118,7 +141,7 @@ export function AccountSelector({ accounts, selectedAccountId }: Props) {
         <span className="flex-1 truncate text-xs text-zinc-300">
           {selectedAccount
             ? `@${selectedAccount.username ?? selectedAccount.displayName ?? "conta"}`
-            : "Sem conta"}
+            : "Selecionar conta"}
         </span>
 
         {/* Network chip */}
@@ -176,7 +199,7 @@ export function AccountSelector({ accounts, selectedAccountId }: Props) {
 
                   {/* Checkmark for selected */}
                   {isSelected && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-violet-400" />
+                    <Check className="h-3.5 w-3.5 shrink-0 text-pink-400" />
                   )}
                 </button>
               );

@@ -152,7 +152,7 @@ export default function CadastroPage() {
 
         <p className="mt-6 text-center text-sm text-zinc-500">
           Já tem conta?{" "}
-          <Link href="/login" className="text-violet-400 hover:text-violet-300">
+          <Link href="/login" className="text-pink-400 hover:text-pink-300">
             Entrar
           </Link>
         </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -21,6 +21,9 @@ import {
   Plus,
   BookOpen,
   FlaskConical,
+  Copy,
+  Send,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +45,7 @@ type TrendPost = {
 type Trend = {
   id: string;
   format: string;
+  contentMode: string | null;
   hook: string;
   status: string;
   qualityScore: number | null;
@@ -97,6 +101,9 @@ type Campaign = {
   trendsPerDay: number;
   postsPerDay: number;
   createdAt: string;
+  customSchedule: string | null;
+  approvalMode: string;
+  startDate: string | null;
   metrics: {
     totalClicks: number;
     totalImpressions: number;
@@ -107,7 +114,23 @@ type Campaign = {
   learnings: Learning[];
   events: CampaignEvent[];
   generationJobs: GenerationJob[];
+  socialAccount: { id: string; username: string | null; network: string; isMock: boolean } | null;
+  narrator: { id: string; name: string } | null;
 };
+
+const CONTENT_MODE_LABELS: Record<string, string> = {
+  "story-produto": "Story + Produto",
+  "story-organico": "Story Orgânico",
+  desabafo: "Desabafo",
+  polemica: "Polêmica",
+  pergunta: "Pergunta",
+  "mix-editorial": "Mix Editorial",
+};
+
+function campaignSchedule(campaign: Campaign) {
+  try { return JSON.parse(campaign.customSchedule || "{}") as { contentMode?: string; editorialModes?: string[]; scheduleTimes?: string[]; scheduleDays?: number[] }; }
+  catch { return {}; }
+}
 
 function statusColor(status: string) {
   const map: Record<string, string> = {
@@ -145,16 +168,36 @@ function trendStatusLabel(status: string) {
 }
 
 const EVENT_ICONS: Record<string, React.ReactNode> = {
-  created: <Sparkles className="h-3.5 w-3.5 text-violet-400" />,
-  generated: <Sparkles className="h-3.5 w-3.5 text-violet-400" />,
+  created: <Sparkles className="h-3.5 w-3.5 text-pink-400" />,
+  generated: <Sparkles className="h-3.5 w-3.5 text-pink-400" />,
   approved: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />,
   rejected: <XCircle className="h-3.5 w-3.5 text-red-400" />,
   published: <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />,
   learning_detected: <BookOpen className="h-3.5 w-3.5 text-amber-400" />,
   scale_started: <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />,
   saturation_detected: <Eye className="h-3.5 w-3.5 text-amber-400" />,
-  strategy_changed: <FlaskConical className="h-3.5 w-3.5 text-violet-400" />,
+  strategy_changed: <FlaskConical className="h-3.5 w-3.5 text-pink-400" />,
 };
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        void navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      title="Copiar post"
+      className="shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors"
+    >
+      {copied
+        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+        : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
 
 function JobProgressCard({ job }: { job: GenerationJob }) {
   const completed = job.status === "completed";
@@ -165,10 +208,10 @@ function JobProgressCard({ job }: { job: GenerationJob }) {
     <div className={`rounded-lg border p-3 ${
       completed ? "border-emerald-800/40 bg-emerald-950/10" :
       failed ? "border-red-800/40 bg-red-950/10" :
-      "border-violet-800/40 bg-violet-950/10"
+      "border-pink-800/40 bg-pink-950/10"
     }`}>
       <div className="flex items-center gap-2 mb-2">
-        {active && <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />}
+        {active && <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-400" />}
         {completed && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
         {failed && <XCircle className="h-3.5 w-3.5 text-red-400" />}
         <span className="text-xs font-medium text-zinc-200">{job.statusLabel}</span>
@@ -177,7 +220,7 @@ function JobProgressCard({ job }: { job: GenerationJob }) {
       {active && (
         <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
           <div
-            className="h-full rounded-full bg-violet-500 transition-all"
+            className="h-full rounded-full bg-pink-500 transition-all"
             style={{ width: `${job.progress}%` }}
           />
         </div>
@@ -191,6 +234,41 @@ function JobProgressCard({ job }: { job: GenerationJob }) {
 
 function TrendRow({ trend }: { trend: Trend }) {
   const [open, setOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [scheduleAt, setScheduleAt] = useState(() => format(new Date(Date.now() + 10 * 60_000), "yyyy-MM-dd'T'HH:mm"));
+  const [scheduling, setScheduling] = useState(false);
+
+  async function publishNow() {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const response = await fetch(`/api/trends/${trend.id}/publish`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha ao publicar");
+      window.location.reload();
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : "Falha ao publicar");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function schedulePublication() {
+    setScheduling(true);
+    setPublishError(null);
+    try {
+      const response = await fetch(`/api/trends/${trend.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "schedule", status: "scheduled", scheduledAt: new Date(scheduleAt).toISOString() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha ao agendar");
+      window.location.reload();
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : "Falha ao agendar");
+    } finally { setScheduling(false); }
+  }
 
   return (
     <div className="border-b border-zinc-800 last:border-0">
@@ -208,9 +286,9 @@ function TrendRow({ trend }: { trend: Trend }) {
             <Badge variant={trendStatusColor(trend.status)} className="text-xs">
               {trendStatusLabel(trend.status)}
             </Badge>
-            <span className="text-xs text-zinc-500">{formatLabel(trend.format)}</span>
+            <span className="text-xs text-pink-300">{trend.contentMode ? CONTENT_MODE_LABELS[trend.contentMode] ?? trend.contentMode : formatLabel(trend.format)}</span>
             {trend.qualityScore && (
-              <span className="text-xs text-violet-400">
+              <span className="text-xs text-pink-400">
                 {Math.round(trend.qualityScore * 100)}% qualidade
               </span>
             )}
@@ -231,22 +309,47 @@ function TrendRow({ trend }: { trend: Trend }) {
           )}
           {trend.scheduledAt && !trend.publishedAt && (
             <p className="text-xs text-zinc-500 mt-1">
-              Agendada para {format(new Date(trend.scheduledAt), "dd/MM/yyyy", { locale: ptBR })}
+              Agendada para {format(new Date(trend.scheduledAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
             </p>
+          )}
+          {trend.status === "approved" && !trend.scheduledAt && (
+            <p className="text-xs text-amber-400 mt-1">Aprovada, mas ainda não agendada</p>
           )}
         </div>
       </button>
       {open && (
-        <div className="px-5 pb-4 space-y-2 ml-7">
+        <div className="px-5 pb-4 space-y-3 ml-7">
+          {trend.status !== "published" && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-pink-800/30 bg-pink-950/10 p-3">
+              <div><p className="text-sm font-medium text-zinc-200">Publicar esta historia no Threads</p>{publishError && <p className="mt-1 text-xs text-red-400">{publishError}</p>}</div>
+              <Button size="sm" onClick={() => void publishNow()} disabled={publishing}>{publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{publishing ? "Publicando..." : "Publicar agora"}</Button>
+            </div>
+          )}
+          {trend.status !== "published" && (
+            <div className="flex flex-wrap items-end gap-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+              <label className="flex-1 min-w-56 text-xs text-zinc-400">Data e horário
+                <input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200" />
+              </label>
+              <Button variant="outline" size="sm" onClick={() => void schedulePublication()} disabled={scheduling || !scheduleAt}>
+                {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
+                Agendar
+              </Button>
+            </div>
+          )}
           {trend.posts.map((p) => (
-            <div key={p.id} className="flex gap-3">
-              <span className="text-xs text-zinc-600 shrink-0 w-5 text-right">{p.position}.</span>
-              <p className="text-sm text-zinc-300 leading-relaxed flex-1">{p.content}</p>
-              {p.hasMedia && (
-                <Badge variant="outline" className="text-xs shrink-0 self-start">
-                  {p.mediaType ?? "mídia"}
-                </Badge>
-              )}
+            <div key={p.id} className="rounded-lg bg-zinc-800/40 p-3">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="text-xs text-zinc-600 font-mono">Post {p.position}/{trend.postsCount}</span>
+                <div className="flex items-center gap-2">
+                  {p.hasMedia && (
+                    <Badge variant="outline" className="text-xs">
+                      {p.mediaType ?? "mídia"}
+                    </Badge>
+                  )}
+                  <CopyButton text={p.content} />
+                </div>
+              </div>
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{p.content}</p>
             </div>
           ))}
         </div>
@@ -284,7 +387,7 @@ function TimelineEvent({ event }: { event: CampaignEvent }) {
         {meta && (meta.family || meta.emotion) && (
           <div className="flex flex-wrap gap-1 mt-2">
             {meta.family && (
-              <span className="text-xs px-1.5 py-0.5 rounded bg-violet-600/10 border border-violet-800/30 text-violet-300">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-pink-600/10 border border-pink-800/30 text-pink-300">
                 {meta.family}
               </span>
             )}
@@ -339,7 +442,7 @@ function LaboratorioTab({ campaign }: { campaign: Campaign }) {
       {/* Status counts */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Geradas", value: totalGenerated, color: "text-violet-400" },
+          { label: "Geradas", value: totalGenerated, color: "text-pink-400" },
           { label: "Publicadas", value: published.length, color: "text-blue-400" },
           { label: "Aprovadas", value: approved.length, color: "text-emerald-400" },
           { label: "Rejeitadas", value: rejected.length, color: "text-red-400" },
@@ -360,8 +463,8 @@ function LaboratorioTab({ campaign }: { campaign: Campaign }) {
           <p className="text-sm text-zinc-400">O laboratório começa a funcionar após a primeira geração</p>
         </div>
       ) : (
-        <div className="rounded-lg border border-violet-800/30 border-l-2 border-l-violet-500 bg-zinc-900/50 p-4">
-          <p className="text-xs text-violet-400 font-mono mb-2 tracking-wide">A ENTIDADE</p>
+        <div className="rounded-lg border border-pink-800/30 border-l-2 border-l-pink-500 bg-zinc-900/50 p-4">
+          <p className="text-xs text-pink-400 font-mono mb-2 tracking-wide">A ENTIDADE</p>
           <p className="text-sm text-zinc-300 font-mono leading-relaxed">
             {totalGenerated === 1
               ? `Primeira narrativa desta campanha gerada. Aguardando dados de performance para detectar padrões.`
@@ -398,7 +501,7 @@ function LaboratorioTab({ campaign }: { campaign: Campaign }) {
                         <span className="text-xs text-zinc-500 shrink-0">{count}×</span>
                         <div className="w-12 h-1 rounded-full bg-zinc-800 shrink-0 overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-violet-500"
+                            className="h-full rounded-full bg-pink-500"
                             style={{ width: `${(count / totalGenerated) * 100}%` }}
                           />
                         </div>
@@ -416,6 +519,7 @@ function LaboratorioTab({ campaign }: { campaign: Campaign }) {
 
 export default function CampaignDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -480,6 +584,14 @@ export default function CampaignDetailPage() {
     setGenerating(false);
   }
 
+  async function deleteCampaign() {
+    if (!window.confirm("Excluir esta campanha e todas as narrativas e agendamentos? Publicações já feitas no Threads não serão apagadas.")) return;
+    setActionLoading(true);
+    const response = await fetch(`/api/campaigns/${params.id as string}`, { method: "DELETE" });
+    if (response.ok) router.push("/campanhas");
+    else setActionLoading(false);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -507,6 +619,11 @@ export default function CampaignDetailPage() {
   const publishedTrends = campaign.trends.filter((t) => t.status === "published");
   const scheduledTrends = campaign.trends.filter((t) => t.status === "scheduled");
   const draftTrends = campaign.trends.filter((t) => t.status === "draft" || t.status === "approved");
+  const schedule = campaignSchedule(campaign);
+  const editorialLabel = schedule.contentMode === "mix-editorial"
+    ? `Mix Editorial (${(schedule.editorialModes ?? []).map((mode) => CONTENT_MODE_LABELS[mode] ?? mode).join(", ")})`
+    : CONTENT_MODE_LABELS[schedule.contentMode ?? ""] ?? schedule.contentMode ?? "Não informado";
+  const nextScheduled = scheduledTrends.filter((trend) => trend.scheduledAt).sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime())[0];
 
   const activeJob = campaign.generationJobs.find(
     (j) => j.status !== "completed" && j.status !== "failed"
@@ -531,6 +648,10 @@ export default function CampaignDetailPage() {
             </div>
             <p className="text-sm text-zinc-500 mt-0.5">
               {campaign.productName} · {campaign.marketplace} · {campaign.targetNetwork}
+            </p>
+            <p className="text-xs text-zinc-600 mt-1">
+              {campaign.socialAccount ? `@${campaign.socialAccount.username}` : "Sem conta vinculada"}
+              {campaign.narrator ? ` · Narrador ${campaign.narrator.name}` : " · Sem narrador"}
             </p>
           </div>
         </div>
@@ -563,6 +684,9 @@ export default function CampaignDetailPage() {
               <Play className="h-4 w-4" />
             </Button>
           ) : null}
+          <Button variant="outline" size="sm" onClick={deleteCampaign} disabled={actionLoading} className="border-red-900/60 text-red-400 hover:bg-red-950/30">
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -575,7 +699,7 @@ export default function CampaignDetailPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { label: "Cliques", value: formatNumber(campaign.metrics.totalClicks), icon: MousePointerClick, color: "text-blue-400" },
-          { label: "Impressões", value: formatNumber(campaign.metrics.totalImpressions), icon: Eye, color: "text-violet-400" },
+          { label: "Impressões", value: formatNumber(campaign.metrics.totalImpressions), icon: Eye, color: "text-pink-400" },
           { label: "CTR", value: formatPercent(ctr), icon: TrendingUp, color: "text-amber-400" },
           { label: "Receita", value: formatCurrency(campaign.metrics.totalRevenue), icon: DollarSign, color: "text-emerald-400" },
         ].map((m) => (
@@ -676,8 +800,10 @@ export default function CampaignDetailPage() {
       <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
           {[
-            { label: "Objetivo", value: campaign.objective },
-            { label: "Modo", value: campaign.mode },
+            { label: "Conteúdo", value: editorialLabel },
+            { label: "Publicação", value: campaign.approvalMode === "auto" ? "Automática" : "Revisão manual" },
+            { label: "Horários", value: schedule.scheduleTimes?.length ? schedule.scheduleTimes.join(", ") : "Nenhum horário" },
+            { label: "Próxima publicação", value: nextScheduled?.scheduledAt ? format(new Date(nextScheduled.scheduledAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "Não agendada" },
             { label: "Narrativas/dia", value: campaign.trendsPerDay },
             { label: "Posts/dia", value: campaign.postsPerDay },
             { label: "Criada em", value: format(new Date(campaign.createdAt), "dd/MM/yyyy", { locale: ptBR }) },

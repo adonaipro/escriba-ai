@@ -1,12 +1,13 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { CheckCircle, XCircle, AlertCircle, Users } from "lucide-react";
+import { CheckCircle, XCircle, Users, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { ConnectAccountForm } from "./connect-account-form";
+import { DisconnectThreadsButton } from "./threads-actions";
+import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
 
 async function getAccounts(profileId: string) {
   const [socialAccounts, marketplaceAccounts, narrators] = await Promise.all([
@@ -39,7 +40,7 @@ const MARKETPLACES = [
     name: "Shopee",
     description: "Marketplace principal — tracking de cliques e conversões",
     available: true,
-    mock: true,
+    mock: false,
   },
   {
     id: "amazon",
@@ -59,13 +60,15 @@ const MARKETPLACES = [
   },
 ];
 
-export default async function IntegracoesPage() {
+export default async function IntegracoesPage({ searchParams }: { searchParams: Promise<{ threads_connected?: string; threads_error?: string }> }) {
   const session = await getSession();
   if (!session?.user.profile) return null;
 
   const { socialAccounts, marketplaceAccounts, narrators } = await getAccounts(
     session.user.profile.id
   );
+  const params = await searchParams;
+  const shopeeConfigured = hasShopeeCredentials();
 
   function getMarketplaceStatus(marketplaceId: string) {
     return marketplaceAccounts.find((a) => a.marketplace === marketplaceId);
@@ -80,6 +83,13 @@ export default async function IntegracoesPage() {
         </p>
       </div>
 
+      {params.threads_connected === "1" && (
+        <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300">Perfil do Threads conectado e autorizado para publicacao.</div>
+      )}
+      {params.threads_error && (
+        <div className="rounded-lg border border-red-800/40 bg-red-950/20 px-4 py-3 text-sm text-red-300">Nao foi possivel conectar: {params.threads_error}</div>
+      )}
+
       {/* Connected accounts list */}
       {socialAccounts.length > 0 && (
         <div>
@@ -87,6 +97,7 @@ export default async function IntegracoesPage() {
           <div className="space-y-3">
             {socialAccounts.map((account) => {
               const activeNarrator = account.accountNarrators?.[0]?.narrator ?? null;
+              const hasInsightsScope = account.tokenScopes?.split(",").includes("threads_manage_insights") ?? false;
               return (
                 <Card key={account.id}>
                   <CardContent className="p-5">
@@ -109,17 +120,18 @@ export default async function IntegracoesPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-emerald-400 shrink-0">
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-xs">Conectado</span>
-                      </div>
+                      {!account.isMock && account.accessToken ? (
+                        <div className="flex items-center gap-2 shrink-0"><div className={`mr-1 flex items-center gap-2 ${hasInsightsScope ? "text-emerald-400" : "text-amber-400"}`}>{hasInsightsScope ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}<span className="text-xs">{hasInsightsScope ? "Publicação e métricas" : "Reautorize para ativar métricas"}</span></div><Button size="sm" variant="outline" asChild><a href="/api/integrations/threads/connect"><ExternalLink className="h-3.5 w-3.5" />{hasInsightsScope ? "Reautorizar" : "Ativar métricas"}</a></Button><DisconnectThreadsButton accountId={account.id} /></div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-amber-400 shrink-0"><XCircle className="h-4 w-4" /><span className="text-xs">Cadastro local</span></div>
+                      )}
                     </div>
 
                     {/* Narrator section */}
                     <div className="mt-4 pt-4 border-t border-zinc-800/50">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Users className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                          <Users className="h-3.5 w-3.5 text-pink-400 shrink-0" />
                           <span className="text-xs text-zinc-400 font-medium">Narrador ativo</span>
                         </div>
                         <Button variant="ghost" size="sm" className="h-6 text-xs text-zinc-500" asChild>
@@ -128,9 +140,9 @@ export default async function IntegracoesPage() {
                       </div>
 
                       {activeNarrator ? (
-                        <div className="mt-2 flex items-center justify-between rounded-lg border border-violet-800/20 bg-violet-950/10 px-3 py-2">
+                        <div className="mt-2 flex items-center justify-between rounded-lg border border-pink-800/20 bg-pink-950/10 px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <div className="h-6 w-6 rounded-full bg-violet-900/40 flex items-center justify-center text-[10px] font-bold text-violet-400">
+                            <div className="h-6 w-6 rounded-full bg-pink-900/40 flex items-center justify-center text-[10px] font-bold text-pink-400">
                               {activeNarrator.name[0]}
                             </div>
                             <div>
@@ -142,7 +154,7 @@ export default async function IntegracoesPage() {
                           </div>
                           <Link
                             href={`/narradores/${activeNarrator.id}`}
-                            className="text-[10px] text-violet-400 hover:text-violet-300 underline underline-offset-2"
+                            className="text-[10px] text-pink-400 hover:text-pink-300 underline underline-offset-2"
                           >
                             Ver perfil
                           </Link>
@@ -152,11 +164,11 @@ export default async function IntegracoesPage() {
                           <p className="text-xs text-zinc-600">
                             Nenhum Narrador vinculado —{" "}
                             {narrators.length > 0 ? (
-                              <Link href="/narradores" className="text-violet-400 hover:text-violet-300 underline underline-offset-2">
+                              <Link href="/narradores" className="text-pink-400 hover:text-pink-300 underline underline-offset-2">
                                 vincular um Narrador
                               </Link>
                             ) : (
-                              <Link href="/narradores/novo" className="text-violet-400 hover:text-violet-300 underline underline-offset-2">
+                              <Link href="/narradores/novo" className="text-pink-400 hover:text-pink-300 underline underline-offset-2">
                                 criar o primeiro Narrador
                               </Link>
                             )}
@@ -172,13 +184,13 @@ export default async function IntegracoesPage() {
         </div>
       )}
 
-      {/* Connect new account form */}
+      {/* Threads OAuth */}
       <div>
         <h2 className="text-lg font-semibold text-zinc-200 mb-1">Conectar nova conta</h2>
         <p className="text-xs text-zinc-500 mb-4">
           Adicione contas de Threads ou X para publicar em múltiplos perfis.
         </p>
-        <ConnectAccountForm narrators={narrators} />
+        <Card><CardContent className="p-5 flex items-center justify-between gap-4"><div><p className="text-sm font-medium text-zinc-100">Threads</p><p className="text-xs text-zinc-500 mt-1">Autorize seu perfil pela API oficial da Meta.</p></div><Button asChild><a href="/api/integrations/threads/connect"><ExternalLink className="h-4 w-4" />Conectar com Threads</a></Button></CardContent></Card>
       </div>
 
       <Separator />
@@ -211,14 +223,13 @@ export default async function IntegracoesPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      {connected ? (
-                        <div className="flex items-center gap-2 text-emerald-400">
-                          <CheckCircle className="h-4 w-4" />
-                          <span className="text-xs">Conectado</span>
+                      {connected || (mp.id === "shopee" && shopeeConfigured) ? (
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 text-emerald-400"><CheckCircle className="h-4 w-4" /><span className="text-xs">API configurada</span></div>
                         </div>
                       ) : mp.available ? (
-                        <Button size="sm" variant="outline">
-                          Configurar
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href="/produtos/oportunidades">Ver produtos</Link>
                         </Button>
                       ) : (
                         <div className="flex items-center gap-2 text-zinc-600">

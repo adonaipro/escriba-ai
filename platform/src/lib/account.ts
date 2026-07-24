@@ -13,6 +13,7 @@ export interface ActiveAccount {
   network: string;
   username: string | null;
   displayName: string | null;
+  avatarUrl: string | null;
   status: string;
   isMock: boolean;
   activeNarrator?: { id: string; name: string } | null;
@@ -58,6 +59,28 @@ export async function getSelectedAccountId(profileId: string): Promise<string | 
   return first?.id ?? null;
 }
 
+export async function getPublishingAccountId(profileId: string, network = "threads"): Promise<string | null> {
+  const selectedId = await getSelectedAccountId(profileId);
+  if (selectedId) {
+    const selected = await prisma.socialAccount.findFirst({
+      where: { id: selectedId, profileId, network, status: "active", isMock: false, accessToken: { not: null } },
+      select: { id: true },
+    });
+    if (selected) {
+      await prisma.profile.update({ where: { id: profileId }, data: { activeAccountId: selected.id } });
+      return selected.id;
+    }
+  }
+
+  const realAccount = await prisma.socialAccount.findFirst({
+    where: { profileId, network, status: "active", isMock: false, accessToken: { not: null } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (realAccount) await prisma.profile.update({ where: { id: profileId }, data: { activeAccountId: realAccount.id } });
+  return realAccount?.id ?? null;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Get full selected account with active narrator
 // ─────────────────────────────────────────────────────────────────
@@ -84,6 +107,7 @@ export async function getSelectedAccount(profileId: string): Promise<ActiveAccou
     network: account.network,
     username: account.username,
     displayName: account.displayName,
+    avatarUrl: account.avatarUrl,
     status: account.status,
     isMock: account.isMock,
     activeNarrator: account.accountNarrators[0]?.narrator ?? null,
@@ -112,6 +136,7 @@ export async function getProfileAccounts(profileId: string): Promise<ActiveAccou
     network: a.network,
     username: a.username,
     displayName: a.displayName,
+    avatarUrl: a.avatarUrl,
     status: a.status,
     isMock: a.isMock,
     activeNarrator: a.accountNarrators[0]?.narrator ?? null,

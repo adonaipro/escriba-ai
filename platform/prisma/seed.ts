@@ -629,18 +629,23 @@ async function main() {
 
   let patternCount = 0;
   for (const p of NARRATIVE_PATTERNS) {
-    await prisma.narrativePattern.upsert({
-      where: { profileId_type_value: { profileId: profile.id, type: p.type, value: p.value } },
-      update: {},
-      create: {
+    const existingPattern = await prisma.narrativePattern.findFirst({
+      where: { profileId: profile.id, socialAccountId: null, type: p.type, value: p.value },
+      select: { id: true },
+    });
+    if (!existingPattern) {
+      await prisma.narrativePattern.create({
+        data: {
         profileId: profile.id,
         type: p.type,
         value: p.value,
         usageCount: p.usageCount,
         winCount: p.winCount,
         totalCtr: p.totalCtr,
+        },
       },
-    });
+      );
+    }
     patternCount++;
   }
   console.log(`NarrativePatterns: ${patternCount}`);

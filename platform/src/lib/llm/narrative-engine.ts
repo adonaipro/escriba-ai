@@ -933,7 +933,7 @@ export async function buildNarrativeLLM(
   // Quando customTheme está ativo, o incident engine geraria incidentes do tema padrão
   // (traição/fofoca) que sobrescrevem o tema do usuário via "Não substitua por outro conflito".
   // Nesse caso, deixamos o story engine guiar-se apenas pelo customTheme.
-  const incidentResult = customTheme ? null : await generateBestIncident(universe, productName, seed, llmConfig);
+  const incidentResult = customTheme ? null : await generateBestIncident(universe, productName, seed, llmConfig, narratorFull);
 
   const withLink = contentMode !== "story-organico";
 

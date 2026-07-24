@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Package, Plus, Search, FlaskConical,
   Megaphone, BarChart3, ChevronRight, Loader2, Star,
-  ShoppingBag, CheckCircle2, AlertCircle, Clock, List, Link as LinkIcon,
+  ShoppingBag, CheckCircle2, AlertCircle, Clock, List, Link as LinkIcon, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -184,12 +184,12 @@ function ImportModal({ onClose, onImported }: {
                 value={url}
                 onChange={(e) => { setUrl(e.target.value); setError(null); }}
                 placeholder="https://shopee.com.br/produto-i.123.456"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
               />
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={onClose} className="flex-1 border-zinc-700">Cancelar</Button>
-                <Button onClick={handleSingleImport} disabled={loading || !url} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white">
+                <Button onClick={handleSingleImport} disabled={loading || !url} className="flex-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Importar"}
                 </Button>
               </div>
@@ -220,7 +220,7 @@ function ImportModal({ onClose, onImported }: {
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={onClose} className="flex-1 border-zinc-700">Fechar</Button>
                 {importedId && (
-                  <Button size="sm" onClick={() => onImported(importedId)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white">
+                  <Button size="sm" onClick={() => onImported(importedId)} className="flex-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white">
                     Ver produto
                   </Button>
                 )}
@@ -237,7 +237,7 @@ function ImportModal({ onClose, onImported }: {
                 onChange={(e) => setBulkText(e.target.value)}
                 placeholder={"https://shopee.com.br/produto-1\nhttps://shopee.com.br/produto-2\nhttps://shopee.com.br/produto-3"}
                 rows={8}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none font-mono"
               />
               <p className="text-xs text-zinc-600">
                 {bulkText.split("\n").filter((l) => l.trim().startsWith("http")).length} links detectados
@@ -247,7 +247,7 @@ function ImportModal({ onClose, onImported }: {
                 <Button
                   onClick={handleBulkImport}
                   disabled={!bulkText.split("\n").some((l) => l.trim().startsWith("http"))}
-                  className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="flex-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   Importar todos
                 </Button>
@@ -266,7 +266,7 @@ function ImportModal({ onClose, onImported }: {
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
                     <div
-                      className="h-full bg-violet-500 rounded-full transition-all duration-300"
+                      className="h-full bg-pink-500 rounded-full transition-all duration-300"
                       style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
                     />
                   </div>
@@ -318,7 +318,7 @@ function ImportModal({ onClose, onImported }: {
 
 // ─── Product Card ─────────────────────────────────────────────────────────────
 
-function ProductCard({ product }: { product: ProductItem }) {
+function ProductCard({ product, selected, onToggle }: { product: ProductItem; selected: boolean; onToggle: () => void }) {
   const router = useRouter();
   const displayPrice = product.promotionalPrice ?? product.price;
   const hasPromo = product.promotionalPrice !== null && product.promotionalPrice < product.price;
@@ -333,8 +333,11 @@ function ProductCard({ product }: { product: ProductItem }) {
           <Package className="h-10 w-10 text-zinc-700" />
         )}
         <div className="absolute top-2 left-2"><MarketplaceBadge marketplace={product.marketplace} /></div>
+        <label className="absolute right-2 top-2 z-10 flex cursor-pointer items-center gap-1.5 rounded-md bg-black/75 px-2 py-1 text-[10px] text-zinc-200">
+          <input type="checkbox" checked={selected} onChange={onToggle} /> Selecionar
+        </label>
         {product.rating && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 rounded px-1.5 py-0.5 bg-black/60 text-xs text-yellow-400">
+          <div className="absolute top-10 right-2 flex items-center gap-1 rounded px-1.5 py-0.5 bg-black/60 text-xs text-yellow-400">
             <Star className="h-2.5 w-2.5 fill-yellow-400" />
             {product.rating.toFixed(1)}
           </div>
@@ -407,6 +410,8 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [deletingProducts, setDeletingProducts] = useState(false);
 
   const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -422,6 +427,17 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
     router.push(`/produtos/${id}`);
   }
 
+  async function deleteSelectedProducts() {
+    if (!selectedProducts.size || !window.confirm(`Excluir ${selectedProducts.size} produto(s) do catálogo? As campanhas existentes serão preservadas.`)) return;
+    setDeletingProducts(true);
+    const results = await Promise.all([...selectedProducts].map((id) => fetch(`/api/produtos/${id}`, { method: "DELETE" })));
+    const failed = results.filter((response) => !response.ok).length;
+    setDeletingProducts(false);
+    if (failed) window.alert(`${failed} produto(s) não puderam ser excluídos.`);
+    setSelectedProducts(new Set());
+    router.refresh();
+  }
+
   return (
     <>
       {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={handleImported} />}
@@ -431,14 +447,15 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
           <div className="flex items-start justify-between mb-8">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <ShoppingBag className="h-5 w-5 text-violet-400" />
+                <ShoppingBag className="h-5 w-5 text-pink-400" />
                 <h1 className="text-lg font-semibold">Produtos</h1>
               </div>
               <p className="text-sm text-zinc-500">Catálogo de produtos afiliados com universo narrativo mapeado.</p>
             </div>
-            <Button onClick={() => setShowImport(true)} className="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
-              <Plus className="h-4 w-4" /> Importar produto
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" asChild><Link href="/produtos/oportunidades"><ShoppingBag className="h-4 w-4" /> Buscar na Shopee</Link></Button>
+              <Button onClick={() => setShowImport(true)} className="gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"><Plus className="h-4 w-4" /> Importar produto</Button>
+            </div>
           </div>
 
           {products.length > 0 && (
@@ -451,7 +468,7 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
               ].map(({ label, value, icon: Icon }) => (
                 <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
                   <div className="flex items-center gap-2 mb-1">
-                    <Icon className="h-4 w-4 text-violet-400" />
+                    <Icon className="h-4 w-4 text-pink-400" />
                     <span className="text-xs text-zinc-500">{label}</span>
                   </div>
                   <p className="text-xl font-semibold text-zinc-100">{value}</p>
@@ -461,21 +478,23 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
           )}
 
           {products.length > 0 && (
-            <div className="relative mb-6">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-600" />
+            <div className="mb-6 flex gap-2">
+              <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-600" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nome, categoria ou marketplace…"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+              /></div>
+              <Button variant="outline" onClick={() => setSelectedProducts((current) => current.size === filtered.length ? new Set() : new Set(filtered.map((product) => product.id)))}>{selectedProducts.size === filtered.length ? "Desmarcar todos" : "Selecionar"}</Button>
+              {selectedProducts.size > 0 && <Button variant="destructive" disabled={deletingProducts} onClick={() => void deleteSelectedProducts()}><Trash2 className="h-4 w-4" />{deletingProducts ? "Excluindo..." : `Excluir (${selectedProducts.size})`}</Button>}
             </div>
           )}
 
           {filtered.length > 0 ? (
             <div className="grid grid-cols-3 gap-5">
-              {filtered.map((p) => <ProductCard key={p.id} product={p} />)}
+              {filtered.map((p) => <ProductCard key={p.id} product={p} selected={selectedProducts.has(p.id)} onToggle={() => setSelectedProducts((current) => { const next = new Set(current); next.has(p.id) ? next.delete(p.id) : next.add(p.id); return next; })} />)}
             </div>
           ) : products.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -484,7 +503,7 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
               <p className="text-sm text-zinc-600 max-w-sm mb-6">
                 Importe um produto por link para mapear seu universo narrativo e usá-lo nas campanhas e no Laboratório.
               </p>
-              <Button onClick={() => setShowImport(true)} className="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
+              <Button onClick={() => setShowImport(true)} className="gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white">
                 <Plus className="h-4 w-4" /> Importar primeiro produto
               </Button>
             </div>
@@ -492,7 +511,7 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Search className="h-8 w-8 text-zinc-700 mb-3" />
               <p className="text-sm text-zinc-500">Nenhum produto encontrado para &quot;{search}&quot;</p>
-              <button onClick={() => setSearch("")} className="text-xs text-violet-400 mt-2 hover:underline">
+              <button onClick={() => setSearch("")} className="text-xs text-pink-400 mt-2 hover:underline">
                 Limpar busca
               </button>
             </div>

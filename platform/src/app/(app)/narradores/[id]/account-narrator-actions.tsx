@@ -170,7 +170,7 @@ export function AccountNarratorActions({
             value={selectedAccountId}
             onChange={(e) => setSelectedAccountId(e.target.value)}
             disabled={loading !== null}
-            className="flex-1 min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-zinc-950 disabled:opacity-50"
+            className="flex-1 min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-zinc-950 disabled:opacity-50"
           >
             <option value="">Selecionar conta…</option>
             {unlinkedAccounts.map((acc) => (

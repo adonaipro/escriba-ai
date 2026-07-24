@@ -26,6 +26,10 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, formatPercent, campaignStatusLabel } from "@/lib/utils";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getSelectedAccountId } from "@/lib/account";
+import { resolveDateRange } from "@/lib/analytics/date-range";
+import { DateRangeFilter } from "@/components/analytics/date-range-filter";
+import { PerformanceChart } from "@/components/analytics/performance-chart";
 
 function statusColor(status: string) {
   const colors: Record<string, string> = {
@@ -65,34 +69,37 @@ function formatScheduleLabel(date: Date): string {
   return format(date, "dd MMM, HH:mm", { locale: ptBR });
 }
 
-async function getDashboardData(profileId: string) {
+async function getDashboardData(profileId: string, accountId: string | null, range: ReturnType<typeof resolveDateRange>) {
   const now = new Date();
   const twentyFourHoursAhead = new Date(now.getTime() + 24 * 3600000);
+  const selectedAccountId = accountId ?? "__no_selected_account__";
+  const campaignWhere = { profileId, socialAccountId: selectedAccountId };
+  const publishedAt = range.from ? { gte: range.from, lte: range.to } : { lte: range.to };
 
   const [campaigns, learnings, publications, upcoming, topPatterns, activeJobs, narrators, globalInsights, recommendations] = await Promise.all([
     prisma.campaign.findMany({
-      where: { profileId },
+      where: campaignWhere,
       include: {
         _count: { select: { trends: true, publications: true } },
         publications: {
-          where: { status: "published" },
+          where: { status: "published", publishedAt },
           select: { clicks: true, impressions: true, revenueBrl: true, conversions: true },
         },
       },
       orderBy: { createdAt: "desc" },
     }),
     prisma.learning.findMany({
-      where: { profileId, state: "active" },
+      where: { profileId, state: "active", campaign: { socialAccountId: selectedAccountId } },
       orderBy: { recordedAt: "desc" },
       take: 5,
     }),
     prisma.publication.findMany({
-      where: { campaign: { profileId }, status: "published" },
-      select: { clicks: true, impressions: true, revenueBrl: true, conversions: true },
+      where: { campaign: campaignWhere, status: "published", publishedAt },
+      select: { clicks: true, impressions: true, revenueBrl: true, conversions: true, likes: true, replies: true, reposts: true, quotes: true, shares: true, publishedAt: true, metricsSyncedAt: true },
     }),
     prisma.publication.findMany({
       where: {
-        campaign: { profileId },
+        campaign: campaignWhere,
         status: { in: ["scheduled", "pending"] },
         scheduledAt: { gte: now, lte: twentyFourHoursAhead },
       },
@@ -105,13 +112,13 @@ async function getDashboardData(profileId: string) {
       take: 10,
     }),
     prisma.narrativePattern.findMany({
-      where: { profileId },
+      where: { profileId, socialAccountId: selectedAccountId },
       orderBy: [{ winCount: "desc" }, { usageCount: "desc" }],
       take: 6,
     }),
     prisma.generationJob.findMany({
       where: {
-        campaign: { profileId },
+        campaign: campaignWhere,
         status: { notIn: ["completed", "failed"] },
       },
       include: { campaign: { select: { id: true, name: true } } },
@@ -119,7 +126,7 @@ async function getDashboardData(profileId: string) {
       take: 3,
     }),
     prisma.narrator.findMany({
-      where: { profileId, status: "active" },
+      where: { profileId, status: "active", accountNarrators: { some: { socialAccountId: selectedAccountId, isActive: true } } },
       include: {
         hypotheses: { where: { status: "winner" }, select: { dimension: true, value: true } },
         _count: { select: { trends: true } },
@@ -128,12 +135,12 @@ async function getDashboardData(profileId: string) {
       take: 3,
     }),
     prisma.globalInsight.findMany({
-      where: { profileId },
+      where: { profileId, id: "__account_scoped_only__" },
       orderBy: { confidence: "desc" },
       take: 2,
     }),
     prisma.narratorRecommendation.findMany({
-      where: { profileId, status: "pending" },
+      where: { profileId, status: "pending", targetNarrator: { accountNarrators: { some: { socialAccountId: selectedAccountId } } } },
       orderBy: { createdAt: "desc" },
       take: 3,
     }),
@@ -143,7 +150,22 @@ async function getDashboardData(profileId: string) {
   const totalClicks = publications.reduce((s, p) => s + (p.clicks || 0), 0);
   const totalImpressions = publications.reduce((s, p) => s + (p.impressions || 0), 0);
   const totalConversions = publications.reduce((s, p) => s + (p.conversions || 0), 0);
+  const totalEngagements = publications.reduce((s, p) => s + (p.likes || 0) + (p.replies || 0) + (p.reposts || 0) + (p.quotes || 0) + (p.shares || 0), 0);
+  const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
+  const publishedPosts = publications.length;
+  const publishedCampaigns = campaigns.filter((campaign) => campaign.publications.length > 0).length;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const latestMetricsSync = publications.reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
+  const dailyMap = new Map<string, { views: number; posts: number }>();
+  for (const publication of publications) {
+    if (!publication.publishedAt) continue;
+    const key = format(publication.publishedAt, "dd/MM");
+    const current = dailyMap.get(key) ?? { views: 0, posts: 0 };
+    current.views += publication.impressions ?? 0;
+    current.posts += 1;
+    dailyMap.set(key, current);
+  }
+  const dailyPerformance = [...dailyMap.entries()].map(([label, value]) => ({ label, ...value }));
 
   // Computed intelligence signals
   const scaleEligible = campaigns.filter((c) => c.status === "scale_eligible");
@@ -221,7 +243,7 @@ async function getDashboardData(profileId: string) {
   }
 
   return {
-    metrics: { totalRevenue, totalClicks, totalImpressions, avgCtr, totalConversions },
+    metrics: { totalRevenue, totalClicks, totalImpressions, avgCtr, totalConversions, totalEngagements, engagementRate, publishedPosts, publishedCampaigns, latestMetricsSync },
     campaigns,
     scaleEligible,
     saturating,
@@ -235,28 +257,32 @@ async function getDashboardData(profileId: string) {
     narrators,
     globalInsights,
     recommendations,
+    dailyPerformance,
   };
 }
 
 function SignalIcon({ type }: { type: "opportunity" | "warning" | "discovery" | "info" }) {
   if (type === "opportunity") return <ArrowUpRight className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />;
   if (type === "warning") return <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />;
-  if (type === "discovery") return <Brain className="h-3.5 w-3.5 text-violet-400 shrink-0 mt-0.5" />;
+  if (type === "discovery") return <Brain className="h-3.5 w-3.5 text-pink-400 shrink-0 mt-0.5" />;
   return <Activity className="h-3.5 w-3.5 text-zinc-400 shrink-0 mt-0.5" />;
 }
 
 function signalBorder(type: "opportunity" | "warning" | "discovery" | "info") {
   if (type === "opportunity") return "border-emerald-800/40 bg-emerald-950/20";
   if (type === "warning") return "border-amber-800/40 bg-amber-950/20";
-  if (type === "discovery") return "border-violet-800/40 bg-violet-950/20";
+  if (type === "discovery") return "border-pink-800/40 bg-pink-950/20";
   return "border-zinc-800 bg-zinc-900/50";
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   const session = await getSession();
   if (!session?.user.profile) return null;
 
-  const data = await getDashboardData(session.user.profile.id);
+  const accountId = await getSelectedAccountId(session.user.profile.id);
+  const params = await searchParams;
+  const range = resolveDateRange(params.period, params.from, params.to);
+  const data = await getDashboardData(session.user.profile.id, accountId, range);
   const activeCampaigns = data.campaigns.filter((c) => !["paused", "ended"].includes(c.status));
 
   return (
@@ -276,6 +302,78 @@ export default async function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      <div className="space-y-2">
+        <DateRangeFilter period={range.period} from={range.fromInput} to={range.toInput} />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+          <span>Resultados acumulados dos posts publicados em: {range.label}.</span>
+          <span>{data.metrics.latestMetricsSync ? `Última sincronização: ${format(data.metrics.latestMetricsSync, "dd/MM/yyyy HH:mm")}` : "Aguardando primeira sincronização de métricas"}</span>
+        </div>
+      </div>
+
+      {/* Onboarding checklist — shown until user has at least one campaign */}
+      {data.campaigns.length === 0 && (
+        <div className="rounded-xl border border-pink-800/30 bg-pink-950/10 p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Zap className="h-4 w-4 text-pink-400" />
+            <h2 className="text-sm font-semibold text-zinc-100">Primeiros passos</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mb-4">Complete esses passos para começar a gerar conteúdo.</p>
+          <div className="space-y-2">
+            {[
+              {
+                done: data.narrators.length > 0,
+                label: "Criar seu primeiro Narrador",
+                detail: "A voz que conta as histórias. Leva 2 minutos com um quiz rápido.",
+                href: "/narradores/novo",
+                cta: "Criar Narrador",
+              },
+              {
+                done: false,
+                label: "Testar uma narrativa no Laboratório",
+                detail: "Gere histórias e veja como a IA trabalha antes de criar uma campanha.",
+                href: "/laboratorio",
+                cta: "Abrir Lab",
+              },
+              {
+                done: false,
+                label: "Lançar sua primeira Campanha",
+                detail: "Vincule um produto afiliado e comece a rastrear resultados reais.",
+                href: "/campanhas/nova",
+                cta: "Criar Campanha",
+              },
+            ].map((step) => (
+              <div
+                key={step.label}
+                className={`flex items-center gap-3 p-3 rounded-lg border ${
+                  step.done
+                    ? "border-emerald-800/30 bg-emerald-950/10 opacity-60"
+                    : "border-zinc-800 bg-zinc-900/50"
+                }`}
+              >
+                <div
+                  className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    step.done ? "border-emerald-500 bg-emerald-500" : "border-zinc-600"
+                  }`}
+                >
+                  {step.done && <CheckCircle2 className="h-3 w-3 text-white" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${step.done ? "text-zinc-500 line-through" : "text-zinc-100"}`}>
+                    {step.label}
+                  </p>
+                  {!step.done && <p className="text-xs text-zinc-500 mt-0.5">{step.detail}</p>}
+                </div>
+                {!step.done && (
+                  <Button asChild size="sm" variant="outline" className="shrink-0 text-xs">
+                    <Link href={step.href}>{step.cta}</Link>
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Intelligence feed */}
       {data.signals.length > 0 && (
@@ -303,7 +401,7 @@ export default async function DashboardPage() {
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         {[
           {
             title: "Receita total",
@@ -314,28 +412,44 @@ export default async function DashboardPage() {
             sub: data.metrics.totalConversions > 0 ? `${data.metrics.totalConversions} conversoes` : "sem conversoes ainda",
           },
           {
-            title: "Cliques",
-            value: formatNumber(data.metrics.totalClicks),
-            icon: MousePointerClick,
+            title: "Visualizações",
+            value: formatNumber(data.metrics.totalImpressions),
+            icon: Eye,
             color: "text-blue-400",
             bg: "bg-blue-600/10",
-            sub: `${formatNumber(data.metrics.totalImpressions)} impressoes`,
+            sub: data.metrics.totalClicks > 0 ? `${formatNumber(data.metrics.totalClicks)} cliques rastreados` : "cliques ainda não rastreados",
           },
           {
-            title: "CTR medio",
-            value: formatPercent(data.metrics.avgCtr),
-            icon: TrendingUp,
+            title: "Interações",
+            value: formatNumber(data.metrics.totalEngagements),
+            icon: Users,
             color: "text-amber-400",
             bg: "bg-amber-600/10",
-            sub: data.metrics.avgCtr > 2 ? "acima da media" : data.metrics.avgCtr > 0 ? "abaixo da media" : "sem dados",
+            sub: "curtidas, respostas e compartilhamentos",
           },
           {
-            title: "Campanhas em escala",
-            value: String(data.scaling.length),
+            title: "Engajamento",
+            value: formatPercent(data.metrics.engagementRate),
+            icon: TrendingUp,
+            color: "text-cyan-400",
+            bg: "bg-cyan-600/10",
+            sub: "interações por visualização",
+          },
+          {
+            title: "Posts publicados",
+            value: formatNumber(data.metrics.publishedPosts),
+            icon: CalendarDays,
+            color: "text-blue-400",
+            bg: "bg-blue-600/10",
+            sub: "blocos enviados ao Threads",
+          },
+          {
+            title: "Campanhas publicadas",
+            value: String(data.metrics.publishedCampaigns),
             icon: Activity,
-            color: "text-violet-400",
-            bg: "bg-violet-600/10",
-            sub: `${data.scaleEligible.length} prontas para escalar`,
+            color: "text-pink-400",
+            bg: "bg-pink-600/10",
+            sub: `${activeCampaigns.length} ativas nesta conta`,
           },
         ].map((m) => (
           <Card key={m.title}>
@@ -352,6 +466,8 @@ export default async function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      <PerformanceChart data={data.dailyPerformance} />
 
       {/* Main grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -466,7 +582,7 @@ export default async function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-violet-400" />
+                  <Brain className="h-4 w-4 text-pink-400" />
                   <CardTitle className="text-base">Padroes detectados</CardTitle>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
@@ -546,7 +662,7 @@ export default async function DashboardPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-violet-400" />
+                    <Users className="h-4 w-4 text-pink-400" />
                     <CardTitle className="text-base">Narradores</CardTitle>
                   </div>
                   <Button variant="ghost" size="sm" asChild>
@@ -556,8 +672,8 @@ export default async function DashboardPage() {
               </CardHeader>
               <CardContent className="space-y-2 pb-4">
                 {data.globalInsights.map((gi) => (
-                  <div key={gi.id} className="rounded-lg border border-violet-800/20 bg-violet-950/10 p-2.5">
-                    <p className="text-[10px] text-violet-400 mb-0.5">descoberta global</p>
+                  <div key={gi.id} className="rounded-lg border border-pink-800/20 bg-pink-950/10 p-2.5">
+                    <p className="text-[10px] text-pink-400 mb-0.5">descoberta global</p>
                     <p className="text-xs text-zinc-300">{gi.title}</p>
                   </div>
                 ))}

@@ -25,7 +25,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ContentMode = "story-produto" | "story-organico" | "desabafo" | "polemica" | "pergunta";
+type EditorialMode = "story-produto" | "story-organico" | "desabafo" | "polemica" | "pergunta";
+type ContentMode = EditorialMode | "mix-editorial";
 
 interface Product { name: string; url: string }
 
@@ -83,7 +84,7 @@ function ProductPickerModal({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar produto..."
-              className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
             />
           )}
         </div>
@@ -115,13 +116,13 @@ function ProductPickerModal({
                 className={[
                   "w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
                   active
-                    ? "border-violet-600 bg-violet-600/10"
+                    ? "border-pink-600 bg-pink-600/10"
                     : "border-zinc-800 hover:border-zinc-700 bg-zinc-800/30",
                 ].join(" ")}
               >
                 <span className={[
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                  active ? "border-violet-500 bg-violet-500" : "border-zinc-600",
+                  active ? "border-pink-500 bg-pink-500" : "border-zinc-600",
                 ].join(" ")}>
                   {active && (
                     <svg viewBox="0 0 8 8" className="h-2.5 w-2.5 fill-white">
@@ -157,7 +158,7 @@ function ProductPickerModal({
             size="sm"
             disabled={selected.size === 0}
             onClick={() => onConfirm(products.filter((p) => selected.has(p.id)))}
-            className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+            className="flex-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
           >
             Adicionar {selected.size > 0 ? `(${selected.size})` : ""} produto{selected.size !== 1 ? "s" : ""}
           </Button>
@@ -173,7 +174,10 @@ const CONTENT_MODE_OPTIONS: { value: ContentMode; label: string }[] = [
   { value: "desabafo",       label: "Desabafo" },
   { value: "polemica",       label: "Polêmica" },
   { value: "pergunta",       label: "Pergunta" },
+  { value: "mix-editorial",  label: "Mix Editorial" },
 ];
+
+const EDITORIAL_OPTIONS = CONTENT_MODE_OPTIONS.filter((option): option is { value: EditorialMode; label: string } => option.value !== "mix-editorial");
 
 const NETWORKS = [
   { value: "threads",   label: "Threads" },
@@ -240,14 +244,14 @@ function GenerationProgress({ state }: { state: GenerationState }) {
         <CardContent className="p-8">
           <div className="flex flex-col items-center text-center gap-6">
             <div className={`flex h-16 w-16 items-center justify-center rounded-full ${
-              completed ? "bg-emerald-600/15" : failed ? "bg-red-600/15" : "bg-violet-600/15"
+              completed ? "bg-emerald-600/15" : failed ? "bg-red-600/15" : "bg-pink-600/15"
             }`}>
               {completed ? (
                 <CheckCircle2 className="h-8 w-8 text-emerald-400" />
               ) : failed ? (
                 <XCircle className="h-8 w-8 text-red-400" />
               ) : (
-                <Sparkles className="h-8 w-8 text-violet-400 animate-pulse" />
+                <Sparkles className="h-8 w-8 text-pink-400 animate-pulse" />
               )}
             </div>
 
@@ -273,7 +277,7 @@ function GenerationProgress({ state }: { state: GenerationState }) {
                 <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      completed ? "bg-emerald-500" : "bg-violet-500"
+                      completed ? "bg-emerald-500" : "bg-pink-500"
                     }`}
                     style={{ width: `${state.progress}%` }}
                   />
@@ -285,7 +289,7 @@ function GenerationProgress({ state }: { state: GenerationState }) {
                     return (
                       <div key={step.label} className="flex items-center gap-2">
                         <div className={`h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${
-                          done ? "bg-emerald-500" : active ? "bg-violet-400 animate-pulse" : "bg-zinc-700"
+                          done ? "bg-emerald-500" : active ? "bg-pink-400 animate-pulse" : "bg-zinc-700"
                         }`} />
                         <span className={`text-xs transition-colors ${
                           done ? "text-emerald-400" : active ? "text-zinc-200" : "text-zinc-600"
@@ -311,6 +315,28 @@ function GenerationProgress({ state }: { state: GenerationState }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+function completeScheduleTimes(input: string[], count: number): string[] {
+  const toMinutes = (time: string) => { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; };
+  const formatMinutes = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  const selected = new Set(input.filter((time) => /^\d{2}:\d{2}$/.test(time)).map(toMinutes));
+  const candidates = Array.from({ length: 85 }, (_, index) => 8 * 60 + index * 10);
+  if (selected.size === 0) {
+    for (let index = 0; index < count; index++) {
+      selected.add(count === 1 ? 12 * 60 : Math.round((8 * 60 + index * (14 * 60) / (count - 1)) / 10) * 10);
+    }
+  }
+  while (selected.size < count) {
+    const best = candidates.filter((candidate) => !selected.has(candidate)).sort((a, b) => {
+      const distanceA = Math.min(...[...selected].map((value) => Math.abs(value - a)));
+      const distanceB = Math.min(...[...selected].map((value) => Math.abs(value - b)));
+      return distanceB - distanceA || Math.random() - 0.5;
+    })[0];
+    if (best === undefined) break;
+    selected.add(best);
+  }
+  return [...selected].sort((a, b) => a - b).slice(0, count).map(formatMinutes);
+}
+
 export default function NovaCampanhaPage() {
   const router = useRouter();
   const [error, setError]           = useState<string | null>(null);
@@ -320,7 +346,12 @@ export default function NovaCampanhaPage() {
 
   // ── Content mode ──────────────────────────────────────────────────
   const [contentMode, setContentMode] = useState<ContentMode>("story-produto");
-  const needsProduct = contentMode === "story-produto";
+  const [editorialModes, setEditorialModes] = useState<EditorialMode[]>(EDITORIAL_OPTIONS.map((option) => option.value));
+  const needsProduct = contentMode === "story-produto" || (contentMode === "mix-editorial" && editorialModes.includes("story-produto"));
+
+  function toggleEditorialMode(mode: EditorialMode) {
+    setEditorialModes((current) => current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode]);
+  }
 
   // ── Products list ─────────────────────────────────────────────────
   const [products, setProducts]           = useState<Product[]>([{ name: "", url: "" }]);
@@ -465,6 +496,13 @@ export default function NovaCampanhaPage() {
       setError("Selecione pelo menos uma rede social.");
       return;
     }
+    if (contentMode === "mix-editorial" && editorialModes.length === 0) {
+      setError("Selecione pelo menos um tipo de conteúdo para o Mix Editorial.");
+      return;
+    }
+    let effectiveScheduleTimes = [...scheduleTimes];
+    if (/^\d{2}:\d{2}$/.test(newTime) && !effectiveScheduleTimes.includes(newTime)) effectiveScheduleTimes.push(newTime);
+    if (data.approvalMode === "auto") effectiveScheduleTimes = completeScheduleTimes(effectiveScheduleTimes, data.trendsPerDay);
 
     setLoading(true);
     setError(null);
@@ -475,6 +513,7 @@ export default function NovaCampanhaPage() {
         body: JSON.stringify({
           ...data,
           contentMode,
+          editorialModes: contentMode === "mix-editorial" ? editorialModes : [contentMode],
           products: needsProduct ? products : [],
           // backward compat — first product
           productUrl: needsProduct ? (products[0]?.url ?? "") : "https://sem-produto.local",
@@ -482,7 +521,7 @@ export default function NovaCampanhaPage() {
           targetNetworks: selectedNetworks,
           targetNetwork: selectedNetworks[0] ?? "threads",
           scheduleDays,
-          scheduleTimes,
+          scheduleTimes: effectiveScheduleTimes,
         }),
       });
       const json = await res.json() as { campaign?: { id: string }; jobId?: string; error?: string };
@@ -547,7 +586,7 @@ export default function NovaCampanhaPage() {
                   className={[
                     "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
                     contentMode === opt.value
-                      ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                      ? "border-pink-600 bg-pink-600/20 text-pink-300"
                       : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600",
                   ].join(" ")}
                 >
@@ -555,6 +594,20 @@ export default function NovaCampanhaPage() {
                 </button>
               ))}
             </div>
+            {contentMode === "mix-editorial" && (
+              <div className="mt-4 rounded-xl border border-pink-800/40 bg-pink-950/10 p-4 space-y-3">
+                <div><p className="text-sm font-medium text-zinc-200">Formatos da rotação</p><p className="text-xs text-zinc-500">O Escriba alternará os formatos nesta ordem.</p></div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {EDITORIAL_OPTIONS.map((option) => {
+                    const active = editorialModes.includes(option.value);
+                    return <button key={option.value} type="button" onClick={() => toggleEditorialMode(option.value)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${active ? "border-pink-600 bg-pink-600/15 text-pink-200" : "border-zinc-700 text-zinc-500"}`}>
+                      <span className={`h-3.5 w-3.5 rounded border ${active ? "border-pink-500 bg-pink-500" : "border-zinc-600"}`} />{option.label}
+                    </button>;
+                  })}
+                </div>
+                <p className="text-xs text-zinc-500">Exemplo com 10 narrativas e todos os formatos: 2 de cada, publicadas alternadamente.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -702,7 +755,7 @@ export default function NovaCampanhaPage() {
                 <button
                   type="button"
                   onClick={toggleAllNetworks}
-                  className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  className="text-xs text-pink-400 hover:text-pink-300 transition-colors"
                 >
                   {selectedNetworks.length === NETWORKS.length ? "Desmarcar tudo" : "Selecionar tudo"}
                 </button>
@@ -718,13 +771,13 @@ export default function NovaCampanhaPage() {
                       className={[
                         "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors text-left",
                         active
-                          ? "border-violet-600 bg-violet-600/15 text-violet-300"
+                          ? "border-pink-600 bg-pink-600/15 text-pink-300"
                           : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600",
                       ].join(" ")}
                     >
                       <span className={[
                         "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
-                        active ? "border-violet-500 bg-violet-500" : "border-zinc-600",
+                        active ? "border-pink-500 bg-pink-500" : "border-zinc-600",
                       ].join(" ")}>
                         {active && <svg viewBox="0 0 8 8" className="h-2 w-2 fill-white"><path d="M1 4l2 2 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
                       </span>
@@ -788,7 +841,7 @@ export default function NovaCampanhaPage() {
                       className={[
                         "h-9 w-10 rounded-md text-xs font-medium border transition-colors",
                         active
-                          ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                          ? "border-pink-600 bg-pink-600/20 text-pink-300"
                           : "border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600",
                       ].join(" ")}
                     >

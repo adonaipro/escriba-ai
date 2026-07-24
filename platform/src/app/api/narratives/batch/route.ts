@@ -7,6 +7,7 @@ import {
   computeSimilarityMatrix,
   type BatchNarrative,
 } from "@/lib/llm/narrative-batch";
+import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
 
 export const runtime = "nodejs";
 
@@ -175,6 +176,7 @@ async function saveTrend(
   campaignId: string,
   tmpl: BatchNarrative
 ) {
+  assertThreadsPostsWithinLimit(tmpl.posts);
   const trend = await prisma.trend.create({
     data: {
       campaignId,

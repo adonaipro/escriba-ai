@@ -101,8 +101,8 @@ export default async function NarradoresPage() {
         ].map(({ label, value, icon: Icon }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/10 shrink-0">
-                <Icon className="h-4 w-4 text-violet-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-600/10 shrink-0">
+                <Icon className="h-4 w-4 text-pink-400" />
               </div>
               <div>
                 <p className="text-xs text-zinc-500">{label}</p>
@@ -115,8 +115,8 @@ export default async function NarradoresPage() {
 
       {/* Global insights */}
       {globalInsights.length > 0 && (
-        <div className="rounded-lg border border-l-2 border-zinc-800 border-l-violet-500 bg-zinc-900/50 p-4">
-          <p className="text-xs text-violet-400 font-mono mb-3 tracking-wide">DESCOBERTAS GLOBAIS</p>
+        <div className="rounded-lg border border-l-2 border-zinc-800 border-l-pink-500 bg-zinc-900/50 p-4">
+          <p className="text-xs text-pink-400 font-mono mb-3 tracking-wide">DESCOBERTAS GLOBAIS</p>
           <div className="space-y-2">
             {globalInsights.map((gi) => (
               <div key={gi.id} className="flex items-start gap-3">
@@ -242,7 +242,7 @@ export default async function NarradoresPage() {
             return (
               <Link key={narrator.id} href={`/narradores/${narrator.id}`}>
                 <div
-                  className={`rounded-xl border p-4 transition-all hover:border-violet-800/50 hover:bg-zinc-900/80 cursor-pointer ${
+                  className={`rounded-xl border p-4 transition-all hover:border-pink-800/50 hover:bg-zinc-900/80 cursor-pointer ${
                     narrator.status === "active"
                       ? "border-zinc-800 bg-zinc-900/40"
                       : "border-zinc-800/50 bg-zinc-900/20 opacity-60"
@@ -308,8 +308,8 @@ export default async function NarradoresPage() {
 
                   {/* Top insight */}
                   {topInsight && (
-                    <div className="rounded-lg bg-violet-950/20 border border-violet-800/20 px-3 py-2">
-                      <p className="text-[10px] text-violet-400 mb-0.5">última descoberta</p>
+                    <div className="rounded-lg bg-pink-950/20 border border-pink-800/20 px-3 py-2">
+                      <p className="text-[10px] text-pink-400 mb-0.5">última descoberta</p>
                       <p className="text-xs text-zinc-300">{topInsight.title}</p>
                     </div>
                   )}

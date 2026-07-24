@@ -11,6 +11,13 @@ import type { LlmProviderConfig } from "./types";
 import type { PipelineNarratorData, StoryDebugData, StoryScore, VoiceToneExperiment, VoiceExperimentData, VoiceToneValue } from "./pipeline-types";
 import { CONFLICT_BANK } from "./human-conflict-engine";
 import type { HumanConflict } from "./human-conflict-engine";
+import { buildNarratorIdentityRules, findNarratorIdentityViolations } from "@/lib/narrators/identity-guard";
+import {
+  THREADS_TEXT_MAX_CHARS,
+  assertThreadsPostsWithinLimit,
+  findOversizedThreadsPosts,
+} from "@/lib/publishing/threads-limits";
+import { isInsufficientQuotaError } from "./api-error";
 
 // ─── Voice Experiment V0 ──────────────────────────────────────────────────────
 // Feature flag — set false to revert instantly to pre-experiment behavior
@@ -289,12 +296,7 @@ async function callLLM(
   if (!res.ok) {
     const errText = await res.text();
 
-    if (
-      res.status === 429 &&
-      (errText.includes("insufficient_quota") ||
-        errText.includes("exceeded your current quota") ||
-        errText.includes("billing"))
-    ) {
+    if ((res.status === 429 || res.status === 400) && isInsufficientQuotaError(errText)) {
       throw new Error(
         "Créditos OpenAI esgotados. Acesse platform.openai.com/billing para adicionar créditos."
       );
@@ -315,6 +317,10 @@ async function callLLM(
       }
       await sleep(Math.min(waitMs, 120_000));
       return callLLM(systemPrompt, userPrompt, config, maxTokens, ctx, label, retryNum + 1, apiSeed);
+    }
+
+    if (res.status === 429) {
+      throw new Error(`Limite momentâneo de requisições/tokens da ${config.provider === "openai" ? "OpenAI" : config.provider}. Aguarde um minuto e tente novamente. (${label})`);
     }
 
     throw new Error(`Story Engine API ${res.status}: ${errText.slice(0, 200)} (${label})`);
@@ -510,7 +516,8 @@ Regras de escrita:
 - descreva o que cada personagem fez após cada fala importante
 - nunca escreva: "percebi", "entendi", "a sensação", "era mais do que", "naquele momento"
 - linguagem coloquial: "parecia cimento" — não "da forma mais inusitada possível"
-- escreva 5 a 6 posts com desenvolvimento denso — não resuma, desenvolva cada cena`;
+- escreva 5 a 6 posts com desenvolvimento denso — não resuma, desenvolva cada cena
+- CADA post deve ter no máximo ${THREADS_TEXT_MAX_CHARS} caracteres (limite do Threads), contando letras, espaços, pontuação e qualquer URL/link`;
 
 
   // Strip any URLs — prevents product URL from leaking into the story
@@ -524,15 +531,15 @@ Regras de escrita:
 
   // Narrator context — explicit gender rules so the model never confuses relationship pronouns
   const genderHint = narrator.sex === "female" ? "narradora mulher" : "narrador homem";
-  const childrenHint = narrator.hasChildren ? "tem filhos" : "";
   const genderRule = narrator.sex === "female"
     ? "Parceiros românticos da narradora são HOMENS: namorado, marido, ex-namorado. Nunca use namorada, esposa, ex-namorada para se referir ao parceiro dela. Use feminino para a narradora (traída, sozinha, cansada)."
     : "Parceiras românticas do narrador são MULHERES: namorada, esposa, ex-namorada. Nunca use namorado, marido, ex-namorado para se referir à parceira dele. Use masculino para o narrador (traído, sozinho, cansado).";
-  const narratorContext = [genderHint, childrenHint].filter(Boolean).join(", ");
+  const narratorContext = genderHint;
+  const identityRules = buildNarratorIdentityRules(narrator);
   // Voice hint appended after narrator line (descritivo, nunca instrução)
   const narratorLine = hintText
-    ? `Narrador: ${narratorContext}\n${genderRule}\n${hintText}`
-    : `Narrador: ${narratorContext}\n${genderRule}`;
+    ? `Narrador: ${narratorContext}\n${identityRules}\n${genderRule}\n${hintText}`
+    : `Narrador: ${narratorContext}\n${identityRules}\n${genderRule}`;
 
   const examplesBlock = examples
     .map((ex, i) => `=== EXEMPLO ${i + 1} ===\n${ex}`)
@@ -613,7 +620,60 @@ Responda APENAS com JSON válido:
     }
   }
 
-  const posts = withLink ? resolveProductLink(rawPosts, productUrl, seed) : rawPosts;
+  // Identity is immutable. This focused retry keeps the same narrative shape
+  // and changes only facts that contradict the narrator profile.
+  const identityViolations = findNarratorIdentityViolations(
+    rawPosts.map((post) => post.content).join("\n"),
+    narrator,
+  );
+  if (identityViolations.length > 0) {
+    const retryUser = `${user}\n\nA resposta anterior contradisse a identidade fixa da pessoa narradora: ${identityViolations.join("; ")}.
+Refaça a mesma proposta narrativa, com o mesmo ritmo, estrutura e intensidade, alterando somente os fatos incompatíveis. Respeite integralmente a identidade fixa.`;
+    const retryText = await callLLM(system, retryUser, config, 1800, ctx, "retry-identidade", 0, seed);
+    const retryParsed = extractJson<{ posts: StoryPost[] }>(retryText);
+    const retryPosts = (retryParsed.posts ?? []).filter((post) => post.content?.trim()).slice(0, 6);
+    const retryViolations = findNarratorIdentityViolations(
+      retryPosts.map((post) => post.content).join("\n"),
+      narrator,
+    );
+    if (retryPosts.length === 0 || retryViolations.length > 0) {
+      throw new Error(`A narrativa contradiz a identidade do narrador: ${(retryViolations.length ? retryViolations : identityViolations).join("; ")}`);
+    }
+    rawPosts = retryPosts;
+    if (incidentSeed) incidentFollowed = validateIncidentFollowed(rawPosts, incidentSeed);
+  }
+
+  let posts = withLink ? resolveProductLink(rawPosts, productUrl, seed) : rawPosts;
+
+  // Threads hard limit — one rewrite attempt, then hard-fail (never silent truncate)
+  let oversized = findOversizedThreadsPosts(posts);
+  if (oversized.length > 0) {
+    const detail = oversized
+      .map((p) => `post ${p.position}: ${p.length} caracteres`)
+      .join("; ");
+    const lengthRetryUser = `${user}
+
+A resposta anterior excedeu o limite de ${THREADS_TEXT_MAX_CHARS} caracteres por post do Threads (${detail}).
+Reescreva a MESMA história com o mesmo ritmo e estilo, mas CADA post com no máximo ${THREADS_TEXT_MAX_CHARS} caracteres (incluindo URL/link se houver).
+Conte caracteres com rigor. Não junte posts; mantenha 5 a 6 posts curtos o suficiente.`;
+    try {
+      const retryText = await callLLM(system, lengthRetryUser, config, 1800, ctx, "retry-length", 0, seed);
+      const retryParsed = extractJson<{ posts: StoryPost[] }>(retryText);
+      const retryPosts = (retryParsed.posts ?? []).filter((p) => p.content?.trim()).slice(0, 6);
+      if (retryPosts.length > 0) {
+        rawPosts = retryPosts;
+        posts = withLink ? resolveProductLink(rawPosts, productUrl, seed) : rawPosts;
+        if (incidentSeed) incidentFollowed = validateIncidentFollowed(rawPosts, incidentSeed);
+      }
+    } catch {
+      // fall through to hard assert below
+    }
+    oversized = findOversizedThreadsPosts(posts);
+    if (oversized.length > 0) {
+      assertThreadsPostsWithinLimit(posts);
+    }
+  }
+
   const score = scoreStory(posts, productUrl);
 
   // Minimal stub for narrative-engine.ts compatibility

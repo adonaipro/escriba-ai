@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { z } from "zod";
-import { getLlmProvider } from "@/lib/llm";
+import { getLlmProvider, resolveEffectiveLlmConfig } from "@/lib/llm";
+import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
+import { scheduleTrend } from "@/lib/scheduling/scheduler";
 
 const updateSchema = z.object({
   status: z.enum(["draft", "approved", "scheduled", "published", "rejected"]).optional(),
@@ -60,14 +62,25 @@ export async function PATCH(
     const body = await request.json();
     const data = updateSchema.parse(body);
 
+    if ((data.action === "schedule" || data.status === "scheduled") && data.scheduledAt) {
+      if (trend.campaign.targetNetwork === "threads") {
+        const existingPosts = await prisma.trendPost.findMany({
+          where: { trendId: id },
+          select: { position: true, content: true },
+          orderBy: { position: "asc" },
+        });
+        assertThreadsPostsWithinLimit(existingPosts);
+      }
+      await scheduleTrend(id, new Date(data.scheduledAt));
+      const scheduled = await prisma.trend.findUnique({ where: { id }, include: { posts: { orderBy: { position: "asc" } } } });
+      return NextResponse.json({ trend: scheduled });
+    }
+
     if (data.action === "regenerate") {
-      // Fetch LLM config and regenerate via provider
       const llmConfigRow = await prisma.llmConfig.findUnique({
         where: { profileId: session.user.profile.id },
       });
-      const llmConfig = llmConfigRow
-        ? { provider: llmConfigRow.provider, apiKey: llmConfigRow.apiKey || undefined, model: llmConfigRow.model || undefined }
-        : null;
+      const llmConfig = resolveEffectiveLlmConfig(llmConfigRow);
 
       const learnings = await prisma.learning.findMany({
         where: { profileId: session.user.profile.id, state: "active" },
@@ -86,6 +99,10 @@ export async function PATCH(
         learnings: learnings.map((l) => l.summary),
         regenerationSeed: Math.floor(Math.random() * 1000000),
       });
+
+      if (trend.campaign.targetNetwork === "threads") {
+        assertThreadsPostsWithinLimit(generated.posts);
+      }
 
       await prisma.trendPost.deleteMany({ where: { trendId: id } });
 
@@ -126,10 +143,11 @@ export async function PATCH(
         { type: "emotion", value: generated.emotion },
         { type: "character", value: generated.character },
       ].filter((e) => e.value)) {
+        if (!trend.campaign.socialAccountId) continue;
         await prisma.narrativePattern.upsert({
-          where: { profileId_type_value: { profileId, type: el.type, value: el.value } },
+          where: { profileId_socialAccountId_type_value: { profileId, socialAccountId: trend.campaign.socialAccountId, type: el.type, value: el.value } },
           update: { usageCount: { increment: 1 } },
-          create: { profileId, type: el.type, value: el.value, usageCount: 1 },
+          create: { profileId, socialAccountId: trend.campaign.socialAccountId, type: el.type, value: el.value, usageCount: 1 },
         });
       }
 
@@ -150,6 +168,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
+    }
+    if (error instanceof Error && /limite de 500 caracteres/i.test(error.message)) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }

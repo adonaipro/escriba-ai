@@ -66,7 +66,7 @@ export default function OnboardingPage() {
                     step > s.id
                       ? "border-transparent text-white"
                       : step === s.id
-                      ? "border-violet-500 bg-[#090909] text-violet-400"
+                      ? "border-pink-500 bg-[#090909] text-pink-400"
                       : "border-zinc-700 bg-[#090909] text-zinc-600"
                   }`}
                   style={step > s.id ? { background: "var(--brand-gradient)" } : undefined}
@@ -144,7 +144,7 @@ export default function OnboardingPage() {
                     onClick={() => setNetwork(n)}
                     className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
                       network === n
-                        ? "border-violet-500 bg-violet-600/10 text-violet-400"
+                        ? "border-pink-500 bg-pink-600/10 text-pink-400"
                         : "border-zinc-700 text-zinc-400 hover:border-zinc-600"
                     }`}
                   >

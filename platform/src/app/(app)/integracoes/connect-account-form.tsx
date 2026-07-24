@@ -86,7 +86,7 @@ export function ConnectAccountForm({ narrators }: Props) {
                   onClick={() => setNetwork(n)}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
                     network === n
-                      ? "border-violet-600 bg-violet-600/10 text-violet-400"
+                      ? "border-pink-600 bg-pink-600/10 text-pink-400"
                       : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
                   }`}
                 >
@@ -107,7 +107,7 @@ export function ConnectAccountForm({ narrators }: Props) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="usuário (sem @)"
               required
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-violet-600 focus:outline-none focus:ring-1 focus:ring-violet-600/50"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-pink-600 focus:outline-none focus:ring-1 focus:ring-pink-600/50"
             />
           </div>
 
@@ -121,7 +121,7 @@ export function ConnectAccountForm({ narrators }: Props) {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Ex: Casa Real, Moda Atual…"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-violet-600 focus:outline-none focus:ring-1 focus:ring-violet-600/50"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-pink-600 focus:outline-none focus:ring-1 focus:ring-pink-600/50"
             />
           </div>
 
@@ -134,7 +134,7 @@ export function ConnectAccountForm({ narrators }: Props) {
               <select
                 value={narratorId}
                 onChange={(e) => setNarratorId(e.target.value)}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-violet-600 focus:outline-none focus:ring-1 focus:ring-violet-600/50"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-pink-600 focus:outline-none focus:ring-1 focus:ring-pink-600/50"
               >
                 <option value="">Sem narrador (vincular depois)</option>
                 {narrators.map((n) => (

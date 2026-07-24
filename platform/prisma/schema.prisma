@@ -33,7 +33,7 @@ model Profile {
   niche               String
   displayName         String?
   state               String                   @default("learning")
-  activeAccountId     String?                  // last selected social account (persists across devices)
+  activeAccountId     String? // last selected social account (persists across devices)
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -47,6 +47,7 @@ model Profile {
   globalInsights      GlobalInsight[]
   recommendations     NarratorRecommendation[]
   products            Product[]
+  shopeeOffers        ShopeeOffer[]
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -56,10 +57,10 @@ model Profile {
 model Narrator {
   id                      String                   @id @default(cuid())
   profileId               String
-  name                    String                   // AI-generated: "Laura", "Rafael"
-  sex                     String                   // "female" | "male"
-  ageRange                String                   // "18-25" | "26-35" | "36-45" | "46+"
-  maritalStatus           String                   // "single" | "dating" | "married" | "divorced"
+  name                    String // AI-generated: "Laura", "Rafael"
+  sex                     String // "female" | "male"
+  ageRange                String // "18-25" | "26-35" | "36-45" | "46+"
+  maritalStatus           String // "single" | "dating" | "married" | "divorced"
   hasChildren             Boolean                  @default(false)
   livesAlone              Boolean                  @default(false)
   status                  String                   @default("active") // "active" | "paused"
@@ -85,20 +86,20 @@ model Narrator {
 // ─────────────────────────────────────────────────────────────────
 
 model NarratorHypothesis {
-  id          String   @id @default(cuid())
-  narratorId  String
-  niche       String   // niche context: "casa", "eletrônicos", "moda", etc.
-  dimension   String   // "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType"
-  value       String   // the specific value being tested
-  status      String   @default("testing") // "testing" | "winner" | "loser"
-  usageCount  Int      @default(0)
-  winCount    Int      @default(0)
-  totalCtr    Float    @default(0)
-  confidence  Float    @default(0)  // 0-1, updated as data accumulates
-  uplift      Float    @default(0)  // % improvement vs baseline
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  narrator    Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  narratorId String
+  niche      String // niche context: "casa", "eletrônicos", "moda", etc.
+  dimension  String // "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType"
+  value      String // the specific value being tested
+  status     String   @default("testing") // "testing" | "winner" | "loser"
+  usageCount Int      @default(0)
+  winCount   Int      @default(0)
+  totalCtr   Float    @default(0)
+  confidence Float    @default(0) // 0-1, updated as data accumulates
+  uplift     Float    @default(0) // % improvement vs baseline
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  narrator   Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
 
   @@unique([narratorId, dimension, value, niche])
 }
@@ -108,17 +109,17 @@ model NarratorHypothesis {
 // ─────────────────────────────────────────────────────────────────
 
 model NarratorInsight {
-  id          String   @id @default(cuid())
-  narratorId  String
-  niche       String
-  title       String
-  body        String
-  dimension   String   // which dimension this insight is about
-  confidence  Float    @default(0)
-  sampleSize  Int      @default(0)
-  impact      String   @default("positive") // "positive" | "negative" | "neutral"
-  createdAt   DateTime @default(now())
-  narrator    Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  narratorId String
+  niche      String
+  title      String
+  body       String
+  dimension  String // which dimension this insight is about
+  confidence Float    @default(0)
+  sampleSize Int      @default(0)
+  impact     String   @default("positive") // "positive" | "negative" | "neutral"
+  createdAt  DateTime @default(now())
+  narrator   Narrator @relation(fields: [narratorId], references: [id], onDelete: Cascade)
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -130,11 +131,11 @@ model GlobalInsight {
   profileId      String
   niche          String
   title          String
-  body           String   // human-readable insight text
+  body           String // human-readable insight text
   dimension      String
-  confidence     Float    @default(0)  // 0-1
+  confidence     Float    @default(0) // 0-1
   sampleSize     Int      @default(0)
-  narratorFilter String?  // e.g. "female|married|hasChildren" — which narrator profile this applies to
+  narratorFilter String? // e.g. "female|married|hasChildren" — which narrator profile this applies to
   impact         String   @default("positive")
   createdAt      DateTime @default(now())
   profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
@@ -149,14 +150,14 @@ model NarratorRecommendation {
   id               String    @id @default(cuid())
   profileId        String
   niche            String
-  type             String    // "create_narrator" | "test_narrator" | "compare_narrators"
+  type             String // "create_narrator" | "test_narrator" | "compare_narrators"
   title            String
-  reasoning        String    // human-readable explanation of WHY
-  evidence         String    // JSON: { retention, ctr, conversions, comments, confidence, sampleSize, dimensionInsights[] }
-  suggestedProfile String?   // JSON: { sex, ageRange, maritalStatus, hasChildren, livesAlone } — for create_narrator
-  targetNarratorId String?   // for test_narrator / compare_narrators
+  reasoning        String // human-readable explanation of WHY
+  evidence         String // JSON: { retention, ctr, conversions, comments, confidence, sampleSize, dimensionInsights[] }
+  suggestedProfile String? // JSON: { sex, ageRange, maritalStatus, hasChildren, livesAlone } — for create_narrator
+  targetNarratorId String? // for test_narrator / compare_narrators
   status           String    @default("pending") // "pending" | "accepted" | "dismissed" | "in_progress"
-  confidence       Float     @default(0)  // 0-1 statistical confidence
+  confidence       Float     @default(0) // 0-1 statistical confidence
   sampleSize       Int       @default(0)
   createdAt        DateTime  @default(now())
   resolvedAt       DateTime?
@@ -176,7 +177,7 @@ model AccountNarrator {
   isActive         Boolean       @default(false)
   startedAt        DateTime      @default(now())
   endedAt          DateTime?
-  reason           String?       // why this narrator was assigned / switched
+  reason           String? // why this narrator was assigned / switched
   // Performance snapshot for this narrator × account period
   totalNarratives  Int           @default(0)
   totalClicks      Int           @default(0)
@@ -197,38 +198,38 @@ model AccountNarrator {
 model Campaign {
   id              String          @id @default(cuid())
   profileId       String
-  socialAccountId String?         // which social account this campaign publishes to
-  narratorId      String?         // optional — campaigns can run without a narrator
+  socialAccountId String? // which social account this campaign publishes to
+  narratorId      String? // optional — campaigns can run without a narrator
   name            String
-  productId      String?         // optional link to Product catalog
-  productUrl     String
-  productName    String
-  marketplace    String          @default("shopee")
-  targetNetwork  String
-  objective      String          @default("sales")
-  language       String          @default("pt-BR")
-  status         String          @default("testing")
-  mode           String          @default("test")
-  aiModel        String          @default("simulated")
-  approvalMode   String          @default("manual")
-  trendsPerDay   Int             @default(2)
-  postsPerDay    Int             @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
-  customSchedule String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  pausedAt       DateTime?
-  endedAt        DateTime?
-  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  socialAccount  SocialAccount?  @relation(fields: [socialAccountId], references: [id])
-  narrator       Narrator?       @relation(fields: [narratorId], references: [id])
-  product        Product?        @relation(fields: [productId], references: [id])
-  trends         Trend[]
-  publications   Publication[]
-  learnings      Learning[]
-  events         CampaignEvent[]
-  generationJobs GenerationJob[]
+  productId       String? // optional link to Product catalog
+  productUrl      String
+  productName     String
+  marketplace     String          @default("shopee")
+  targetNetwork   String
+  objective       String          @default("sales")
+  language        String          @default("pt-BR")
+  status          String          @default("testing")
+  mode            String          @default("test")
+  aiModel         String          @default("simulated")
+  approvalMode    String          @default("manual")
+  trendsPerDay    Int             @default(2)
+  postsPerDay     Int             @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  customSchedule  String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  pausedAt        DateTime?
+  endedAt         DateTime?
+  profile         Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount?  @relation(fields: [socialAccountId], references: [id])
+  narrator        Narrator?       @relation(fields: [narratorId], references: [id])
+  product         Product?        @relation(fields: [productId], references: [id])
+  trends          Trend[]
+  publications    Publication[]
+  learnings       Learning[]
+  events          CampaignEvent[]
+  generationJobs  GenerationJob[]
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -238,8 +239,9 @@ model Campaign {
 model Trend {
   id               String        @id @default(cuid())
   campaignId       String
-  narratorId       String?       // which narrator told this story
+  narratorId       String? // which narrator told this story
   format           String
+  contentMode      String? // story-produto | story-organico | desabafo | polemica | pergunta
   hook             String
   narrativeSummary String
   status           String        @default("draft")
@@ -251,14 +253,15 @@ model Trend {
   totalImpressions Int           @default(0)
   totalConversions Int           @default(0)
   totalRevenueBrl  Float         @default(0)
+  metricsEvaluatedAt DateTime?
   // Experiment dimensions — every narrative is an experiment data point
-  productStrategy  String?       // "clickbait" | "contextual" | "hybrid"
-  tone             String?       // "emocional" | "objetivo" | "reflexivo" | "leve" | "intenso"
-  rhythm           String?       // "rápido" | "médio" | "lento"
-  structureType    String?       // "staircase" | "flash" | "reflection" | "decision"
-  openingStyle     String?       // "ação direta" | "contexto primeiro" | "emoção primeiro"
-  conflictType     String?       // "familiar" | "financeiro" | "relacionamento" | "trabalho" | "cotidiano"
-  questionType     String?       // "moral" | "experiência" | "decisão" | "validação"
+  productStrategy  String? // "clickbait" | "contextual" | "hybrid"
+  tone             String? // "emocional" | "objetivo" | "reflexivo" | "leve" | "intenso"
+  rhythm           String? // "rápido" | "médio" | "lento"
+  structureType    String? // "staircase" | "flash" | "reflection" | "decision"
+  openingStyle     String? // "ação direta" | "contexto primeiro" | "emoção primeiro"
+  conflictType     String? // "familiar" | "financeiro" | "relacionamento" | "trabalho" | "cotidiano"
+  questionType     String? // "moral" | "experiência" | "decisão" | "validação"
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   campaign         Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -275,28 +278,61 @@ model TrendPost {
   hasMedia    Boolean      @default(false)
   mediaType   String?
   publishedAt DateTime?
+  externalId  String?
+  externalUrl String?
   createdAt   DateTime     @default(now())
   trend       Trend        @relation(fields: [trendId], references: [id], onDelete: Cascade)
   publication Publication?
 }
 
 model Publication {
-  id          String      @id @default(cuid())
-  campaignId  String
-  trendId     String?
-  trendPostId String?     @unique
-  scheduledAt DateTime
-  publishedAt DateTime?
-  status      String      @default("scheduled")
-  clicks      Int?
-  impressions Int?
-  conversions Int?
-  revenueBrl  Float?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  trend       Trend?      @relation(fields: [trendId], references: [id])
-  trendPost   TrendPost?  @relation(fields: [trendPostId], references: [id])
+  id           String     @id @default(cuid())
+  campaignId   String
+  trendId      String?
+  trendPostId  String?    @unique
+  scheduledAt  DateTime
+  publishedAt  DateTime?
+  status       String     @default("scheduled")
+  clicks       Int?
+  impressions  Int?
+  likes        Int?
+  replies      Int?
+  reposts      Int?
+  quotes       Int?
+  shares       Int?
+  conversions  Int?
+  revenueBrl   Float?
+  externalId   String?
+  externalUrl  String?
+  attempts     Int        @default(0)
+  lastError    String?
+  processingAt DateTime?
+  metricsSyncedAt DateTime?
+  metricsLastError String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  campaign     Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  trend        Trend?     @relation(fields: [trendId], references: [id])
+  trendPost    TrendPost? @relation(fields: [trendPostId], references: [id])
+  metricSnapshots PublicationMetricSnapshot[]
+}
+
+model PublicationMetricSnapshot {
+  id            String      @id @default(cuid())
+  publicationId String
+  capturedDate  DateTime
+  capturedAt    DateTime    @default(now())
+  impressions   Int         @default(0)
+  likes         Int         @default(0)
+  replies       Int         @default(0)
+  reposts       Int         @default(0)
+  quotes        Int         @default(0)
+  shares        Int         @default(0)
+  publication   Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, capturedDate])
+  @@index([capturedDate])
+  @@index([publicationId, capturedAt])
 }
 
 model Learning {
@@ -319,17 +355,20 @@ model SocialAccount {
   network          String
   externalId       String?
   username         String?
-  displayName      String?           // human label, e.g. "Casa Real"
+  displayName      String? // human label, e.g. "Casa Real"
+  avatarUrl        String?
   status           String            @default("active")
   isMock           Boolean           @default(true)
   accessToken      String?
   tokenExpiresAt   DateTime?
+  tokenScopes      String?
   lastVerifiedAt   DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   profile          Profile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
   accountNarrators AccountNarrator[]
   campaigns        Campaign[]
+  narrativePatterns NarrativePattern[]
 
   @@index([profileId])
   @@index([profileId, network])
@@ -351,6 +390,10 @@ model GenerationJob {
   id          String    @id @default(cuid())
   campaignId  String
   trendId     String?
+  generationKey String? @unique
+  targetDate  DateTime?
+  targetSlot  DateTime?
+  slotIndex   Int?
   status      String    @default("pending")
   statusLabel String    @default("Aguardando...")
   progress    Int       @default(0)
@@ -377,16 +420,20 @@ model CampaignEvent {
 model NarrativePattern {
   id         String   @id @default(cuid())
   profileId  String
+  socialAccountId String?
   type       String
   value      String
   usageCount Int      @default(0)
   winCount   Int      @default(0)
+  evaluatedCount Int  @default(0)
   totalCtr   Float    @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
 
-  @@unique([profileId, type, value])
+  @@unique([profileId, socialAccountId, type, value])
+  @@index([socialAccountId])
 }
 
 model MarketplaceAccount {
@@ -410,8 +457,8 @@ model Product {
   id               String           @id @default(cuid())
   profileId        String
   marketplace      String           @default("shopee")
-  externalId       String?          // marketplace product ID
-  shopId           String?          // marketplace shop/seller ID
+  externalId       String? // marketplace product ID
+  shopId           String? // marketplace shop/seller ID
   name             String
   description      String           @default("")
   category         String           @default("")
@@ -419,8 +466,8 @@ model Product {
   imageUrl         String           @default("")
   price            Float            @default(0)
   promotionalPrice Float?
-  commission       Float            @default(0)    // absolute BRL value
-  commissionPct    Float            @default(0)    // percentage 0-100
+  commission       Float            @default(0) // absolute BRL value
+  commissionPct    Float            @default(0) // percentage 0-100
   rating           Float?
   soldCount        Int              @default(0)
   shopName         String           @default("")
@@ -439,6 +486,41 @@ model Product {
   @@index([profileId, marketplace])
 }
 
+// SHOPEE OFFER — local cache of the affiliate catalog.
+// Offers are only promoted to Product when the user explicitly imports them.
+model ShopeeOffer {
+  id                     String   @id @default(cuid())
+  profileId              String
+  itemId                 String
+  productName            String
+  commissionRate         Float    @default(0)
+  sellerCommissionRate   Float    @default(0)
+  shopeeCommissionRate   Float    @default(0)
+  commission             Float    @default(0)
+  priceMin               Float    @default(0)
+  priceMax               Float?
+  sales                  Int      @default(0)
+  ratingStar             Float    @default(0)
+  imageUrl               String   @default("")
+  productLink            String   @default("")
+  offerLink              String   @default("")
+  shopId                 String   @default("")
+  shopName               String   @default("")
+  productCatIds          String   @default("[]")
+  periodStartTime        String?
+  periodEndTime          String?
+  lastSyncedAt           DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  profile                Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, itemId])
+  @@index([profileId, commissionRate])
+  @@index([profileId, sales])
+  @@index([profileId, ratingStar])
+  @@index([profileId, priceMin])
+}
+
 // ─────────────────────────────────────────────────────────────────
 // PRODUCT ANALYSIS — narrative universe derived from the product
 // Splits confirmed facts (from product data) vs AI inferences
@@ -448,23 +530,23 @@ model ProductAnalysis {
   id                String   @id @default(cuid())
   productId         String   @unique
   // Epistemics: what we know vs what the AI inferred
-  confirmedFacts    String   @default("[]")   // JSON: string[] — sourced from product data
-  aiInferences      String   @default("[]")   // JSON: string[] — AI-derived, must be labelled as such
+  confirmedFacts    String   @default("[]") // JSON: string[] — sourced from product data
+  aiInferences      String   @default("[]") // JSON: string[] — AI-derived, must be labelled as such
   // Narrative universe
-  targetAudience    String   @default("[]")   // JSON: string[]
-  usageOccasions    String   @default("[]")   // JSON: string[]
-  pains             String   @default("[]")   // JSON: string[]
-  benefits          String   @default("[]")   // JSON: string[]
-  scenarios         String   @default("[]")   // JSON: string[]
-  characters        String   @default("[]")   // JSON: string[]
-  conflicts         String   @default("[]")   // JSON: string[]
-  compatibleObjects String   @default("[]")   // JSON: string[]
-  bridgeTopics      String   @default("[]")   // JSON: string[]
-  restrictions      String   @default("[]")   // JSON: string[]
+  targetAudience    String   @default("[]") // JSON: string[]
+  usageOccasions    String   @default("[]") // JSON: string[]
+  pains             String   @default("[]") // JSON: string[]
+  benefits          String   @default("[]") // JSON: string[]
+  scenarios         String   @default("[]") // JSON: string[]
+  characters        String   @default("[]") // JSON: string[]
+  conflicts         String   @default("[]") // JSON: string[]
+  compatibleObjects String   @default("[]") // JSON: string[]
+  bridgeTopics      String   @default("[]") // JSON: string[]
+  restrictions      String   @default("[]") // JSON: string[]
   // Classification
   detectedCategory  String   @default("")
   categoryLabel     String   @default("")
-  confidence        String   @default("low")  // "high" | "medium" | "low"
+  confidence        String   @default("low") // "high" | "medium" | "low"
   analysisVersion   Int      @default(1)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

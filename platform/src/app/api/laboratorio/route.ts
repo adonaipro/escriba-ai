@@ -2,6 +2,21 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+
+// In-memory rate limiter: 20 LLM calls per profile per 60s
+const rlMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(key: string, max = 20, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = rlMap.get(key);
+  if (!entry || entry.resetAt <= now) {
+    rlMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= max) return false;
+  entry.count++;
+  return true;
+}
 import { prisma } from "@/lib/db";
 import {
   buildNarrativeStaircase,
@@ -14,6 +29,7 @@ import {
 } from "@/lib/llm/narrative-engine";
 import type { VoiceToneExperiment, VoiceToneValue } from "@/lib/llm/pipeline-types";
 import type { LlmProviderConfig } from "@/lib/llm/types";
+import { resolveEffectiveLlmConfig } from "@/lib/llm";
 import { computeSimilarityMatrix, type BatchNarrative } from "@/lib/llm/narrative-batch";
 import { validateCoherence } from "@/lib/products/coherence-validator";
 import { buildUniverseFromStoredAnalysis } from "@/lib/llm/product-intelligence-engine";
@@ -208,17 +224,35 @@ async function generateNLLM(
   customTheme?: string,
 ): Promise<LabNarrative[]> {
   const seed = baseSeed ?? Date.now();
-  const cap = Math.min(n, 5);
+  const cap = Math.max(1, Math.min(n, 10));
 
   // Groq free tier: 12k TPM — run sequentially to avoid rate limit
-  if (llmConfig?.provider === "groq") {
-    const results: LabNarrative[] = [];
-    for (let i = 0; i < cap; i++) {
-      results.push(
-        await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode, customTheme),
-      );
+  if (llmConfig?.provider === "groq" || llmConfig?.provider === "openai") {
+    const results: Array<LabNarrative | undefined> = new Array(cap);
+    const errors: Array<string | undefined> = new Array(cap);
+    const concurrency = llmConfig.provider === "openai" ? Math.min(2, cap) : 1;
+    let nextIndex = 0;
+
+    async function worker(): Promise<void> {
+      while (nextIndex < cap) {
+        const index = nextIndex++;
+        try {
+          results[index] = await generateOneLLM(
+            narrator, productName, productUrl, llmConfig, strategy,
+            seed + index * 137, storedAnalysis, undefined, contentMode, customTheme,
+          );
+        } catch (error) {
+          errors[index] = error instanceof Error ? error.message : String(error);
+        }
+      }
     }
-    return results;
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    const completed = results.filter((result): result is LabNarrative => result !== undefined);
+    const failures = errors.filter((error): error is string => error !== undefined);
+    if (completed.length === 0 && failures.length > 0) throw new Error(failures[0]);
+    if (failures.length > 0) console.warn(`[Laboratorio] ${failures.length} de ${cap} narrativas falharam:`, failures);
+    return completed;
   }
 
   return Promise.all(
@@ -304,17 +338,17 @@ export async function POST(req: NextRequest) {
 
   const { mode } = body;
 
-  // Fetch LLM config — determines whether generation uses real LLM or staircase fallback
+  // Fetch LLM config — prefers user BYOK, falls back to platform key, then staircase
   const llmConfigRow = await prisma.llmConfig.findUnique({ where: { profileId } });
-  const llmConfig: LlmProviderConfig | null =
-    llmConfigRow && llmConfigRow.provider !== "simulated"
-      ? {
-          provider: llmConfigRow.provider as LlmProviderConfig["provider"],
-          apiKey:   llmConfigRow.apiKey   ?? undefined,
-          model:    llmConfigRow.model    ?? undefined,
-          baseUrl:  llmConfigRow.baseUrl  ?? undefined,
-        }
-      : null;
+  const llmConfig = resolveEffectiveLlmConfig(llmConfigRow);
+
+  // Rate limit LLM calls only (staircase is free/cheap)
+  if (llmConfig && !checkRateLimit(`lab:${profileId}`)) {
+    return NextResponse.json(
+      { error: "Muitas gerações em pouco tempo. Aguarde 1 minuto e tente novamente." },
+      { status: 429 },
+    );
+  }
 
   // Resolve product — DB analysis preferred over free text
   let productName = body.productName ?? "";
@@ -351,6 +385,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         narratives,
         isLLM: !!llmConfig,
+        warning: narratives.length < count
+          ? `${narratives.length} de ${count} narrativas foram concluídas. As demais falharam após as tentativas automáticas.`
+          : undefined,
         entityExplanation: buildEntityExplanation(narrator, narratives[0], "explorar combinações livres", productInfo),
       });
     }
@@ -386,18 +423,21 @@ export async function POST(req: NextRequest) {
     if (mode === "compare") {
       const ids = (body.narratorIds ?? []).slice(0, 5);
       const seed = Date.now();
-      const rows = await Promise.all(
-        ids.map(async (id, i) => {
-          const narrator = await fetchNarrator(id, profileId);
-          if (!narrator) return null;
-          if (llmConfig) {
-            const [narrative] = await generateNLLM(narrator, productName, productUrl, 1, llmConfig, undefined, seed + i * 1000, storedAnalysis);
-            return narrative;
-          }
+      const rows: Array<LabNarrative | null> = [];
+      for (const [i, id] of ids.entries()) {
+        const narrator = await fetchNarrator(id, profileId);
+        if (!narrator) {
+          rows.push(null);
+          continue;
+        }
+        if (llmConfig) {
+          const [narrative] = await generateNLLM(narrator, productName, productUrl, 1, llmConfig, undefined, seed + i * 1000, storedAnalysis);
+          rows.push(narrative ?? null);
+        } else {
           const [narrative] = generateN(narrator, productName, productUrl, 1, undefined, seed + i * 1000, storedAnalysis);
-          return narrative;
-        })
-      );
+          rows.push(narrative ?? null);
+        }
+      }
       return NextResponse.json({ narratives: rows.filter(Boolean), isLLM: !!llmConfig });
     }
 
@@ -409,12 +449,11 @@ export async function POST(req: NextRequest) {
       const seed = Date.now();
       let narratives: LabNarrative[];
       if (llmConfig) {
-        narratives = await Promise.all(
-          strategies.map((s, i) =>
-            generateOneLLM(narrator, productName, productUrl, llmConfig, s, seed + i * 1000, storedAnalysis)
-              .then((n) => ({ ...n, id: `lab-${s}` })),
-          ),
-        );
+        narratives = [];
+        for (const [i, strategy] of strategies.entries()) {
+          const narrative = await generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 1000, storedAnalysis);
+          narratives.push({ ...narrative, id: `lab-${strategy}` });
+        }
       } else {
         narratives = strategies.map((s, i) => ({
           ...generateWithCoherence(narrator, productName, productUrl, s, seed + i * 1000, storedAnalysis),
@@ -438,25 +477,14 @@ export async function POST(req: NextRequest) {
       const seed = Date.now();
       const toneValues: VoiceToneValue[] = ["control", "leve", "direta", "emocional"];
 
-      let narratives: LabNarrative[];
-      // Groq: sequential to avoid rate limits; others: parallel
-      if (llmConfig.provider === "groq") {
-        narratives = [];
-        for (const toneValue of toneValues) {
-          const experiment: VoiceToneExperiment = { dimension: "tone", value: toneValue };
-          narratives.push(
-            await generateOneLLM(narrator, productName, productUrl, llmConfig, undefined, seed, storedAnalysis, experiment)
-              .then(n => ({ ...n, id: `lab-exploration-${toneValue}` })),
-          );
-        }
-      } else {
-        narratives = await Promise.all(
-          toneValues.map(toneValue => {
-            const experiment: VoiceToneExperiment = { dimension: "tone", value: toneValue };
-            return generateOneLLM(narrator, productName, productUrl, llmConfig, undefined, seed, storedAnalysis, experiment)
-              .then(n => ({ ...n, id: `lab-exploration-${toneValue}` }));
-          }),
-        );
+      const narratives: LabNarrative[] = [];
+      // Each narrative performs multiple internal calls; keep experiments
+      // sequential so one burst cannot invalidate the whole batch.
+      
+      for (const toneValue of toneValues) {
+        const experiment: VoiceToneExperiment = { dimension: "tone", value: toneValue };
+        const narrative = await generateOneLLM(narrator, productName, productUrl, llmConfig, undefined, seed, storedAnalysis, experiment);
+        narratives.push({ ...narrative, id: `lab-exploration-${toneValue}` });
       }
 
       return NextResponse.json({

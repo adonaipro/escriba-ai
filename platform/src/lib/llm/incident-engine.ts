@@ -7,6 +7,8 @@
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
 import type { IncidentExperimentData, IncidentCandidate } from "./pipeline-types";
+import type { PipelineNarratorData } from "./pipeline-types";
+import { buildNarratorIdentityRules, findNarratorIdentityViolations } from "@/lib/narrators/identity-guard";
 
 // Feature flag — set false to revert to old behavior instantly
 export const INCIDENT_EXPERIMENT_ENABLED = true;
@@ -44,6 +46,7 @@ async function callIncidentLLM(
   theme: string,
   config: LlmProviderConfig,
   seed: number,
+  narrator: PipelineNarratorData,
 ): Promise<string> {
   const baseUrl = config.baseUrl?.replace(/\/$/, "") ?? (
     config.provider === "openai"     ? "https://api.openai.com/v1"    :
@@ -68,6 +71,8 @@ Formato: começa com a relação ("Meu marido", "Minha irmã", "Minha amiga", "M
 Uma frase, curta e impactante. Não explique, não justifique — só o fato.`;
 
   const user = `Tema: ${theme}
+
+${buildNarratorIdentityRules(narrator)}
 
 Crie UMA fofoca dentro desse tema. Seja completamente livre — crie a situação específica que você quiser, com os personagens que você quiser, no contexto que você quiser. Não precisa seguir nenhum exemplo. Só respeite o tema.
 
@@ -119,6 +124,7 @@ export async function generateBestIncident(
   _productName: string,
   seed: number,
   config: LlmProviderConfig,
+  narrator: PipelineNarratorData,
 ): Promise<{ selectedIncident: string; debug: IncidentExperimentData } | null> {
   if (!INCIDENT_EXPERIMENT_ENABLED) return null;
 
@@ -126,7 +132,8 @@ export async function generateBestIncident(
 
   let selectedIncident: string;
   try {
-    selectedIncident = await callIncidentLLM(theme, config, seed);
+    selectedIncident = await callIncidentLLM(theme, config, seed, narrator);
+    if (findNarratorIdentityViolations(selectedIncident, narrator).length > 0) return null;
   } catch {
     return null;
   }

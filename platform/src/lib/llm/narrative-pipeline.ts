@@ -28,6 +28,7 @@
 
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
+import { isInsufficientQuotaError } from "./api-error";
 import type {
   ExplorationResult,
   BeatPlanResult,
@@ -136,7 +137,7 @@ async function callStage<T>(
 
     if (response.status === 429 || response.status === 400) {
       // OpenAI: saldo insuficiente (não resolve com retry)
-      if (errText.includes("insufficient_quota") || errText.includes("exceeded your current quota") || errText.includes("billing")) {
+      if (isInsufficientQuotaError(errText)) {
         throw new Error("Créditos OpenAI insuficientes. Verifique seu saldo em platform.openai.com/usage.");
       }
     }

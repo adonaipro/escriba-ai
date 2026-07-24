@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { ACCOUNT_COOKIE } from "@/lib/account";
+import { getPublishingAccountId } from "@/lib/account";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const until = new Date(now.getTime() + days * 86400000);
-  const accountId = request.cookies.get(ACCOUNT_COOKIE)?.value ?? null;
+  const accountId = await getPublishingAccountId(session.user.profile.id);
 
   const publications = await prisma.publication.findMany({
     where: {

@@ -5,12 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Megaphone,
-  BookOpen,
   Plug,
   CreditCard,
   Settings,
   CalendarDays,
-  Library,
+  Brain,
   Users,
   BarChart3,
   FlaskConical,
@@ -25,8 +24,7 @@ const navItems = [
   { label: "Campanhas",            href: "/campanhas",    icon: Megaphone },
   { label: "Produtos",             href: "/produtos",     icon: ShoppingBag },
   { label: "Narradores",           href: "/narradores",   icon: Users },
-  { label: "Biblioteca Narrativa", href: "/narrativas",   icon: Library },
-  { label: "Padrões Narrativos",   href: "/aprendizados", icon: BookOpen },
+  { label: "Aprendizados",          href: "/narrativas",   icon: Brain },
   { label: "Laboratório",          href: "/laboratorio",  icon: FlaskConical },
   { label: "Calendário",           href: "/calendario",   icon: CalendarDays },
   { label: "Integrações",          href: "/integracoes",  icon: Plug },
@@ -40,6 +38,7 @@ interface SidebarProps {
     network: string;
     username: string | null;
     displayName: string | null;
+    avatarUrl: string | null;
     status: string;
     isMock: boolean;
     activeNarrator?: { id: string; name: string } | null;

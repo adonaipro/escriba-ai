@@ -23,6 +23,9 @@ import {
   AlertCircle,
   ExternalLink,
   SlidersHorizontal,
+  Copy,
+  ArrowRight,
+  Megaphone,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -165,10 +168,12 @@ interface LabResult {
   narratives: LabNarrative[];
   benchmark?: BenchmarkData;
   entityExplanation?: EntityExplanation;
+  warning?: string;
 }
 
 interface PromoteModal {
   narrative: LabNarrative;
+  narratives?: LabNarrative[];
   campaignName: string;
   marketplace: string;
   targetNetwork: string;
@@ -187,6 +192,27 @@ const SECTIONS = [
 
 type SectionId = typeof SECTIONS[number]["id"];
 
+// ─── CopyButton ──────────────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        void navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      title="Copiar post"
+      className="shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors"
+    >
+      {copied
+        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+        : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 // ─── NarrativeCard ───────────────────────────────────────────────────────────
 
 function NarrativeCard({
@@ -202,7 +228,7 @@ function NarrativeCard({
 
   const strategyColor: Record<string, string> = {
     clickbait: "text-orange-400 bg-orange-950/30 border-orange-800/30",
-    contextual: "text-violet-400 bg-violet-950/30 border-violet-800/30",
+    contextual: "text-pink-400 bg-pink-950/30 border-pink-800/30",
     hybrid:     "text-emerald-400 bg-emerald-950/30 border-emerald-800/30",
   };
 
@@ -237,7 +263,7 @@ function NarrativeCard({
             variant="outline"
             size="sm"
             onClick={() => onPromote(narrative)}
-            className="text-violet-400 border-violet-800/40 hover:bg-violet-950/30 hover:text-violet-300 text-xs gap-1"
+            className="text-pink-400 border-pink-800/40 hover:bg-pink-950/30 hover:text-pink-300 text-xs gap-1"
           >
             <Rocket className="h-3 w-3" />
             Promover
@@ -257,10 +283,11 @@ function NarrativeCard({
           <div className="space-y-2">
             {narrative.posts.map((post) => (
               <div key={post.position} className="rounded-lg bg-zinc-800/50 p-3">
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span className="text-[10px] font-mono text-zinc-500">
                     Post {post.position}/{narrative.posts.length}
                   </span>
+                  <CopyButton text={post.content} />
                 </div>
                 <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{post.content}</p>
               </div>
@@ -282,10 +309,6 @@ function NarrativeCard({
               </div>
             ))}
           </div>
-          {/* Pipeline debug panel — only when pipeline was used */}
-          {narrative.pipelineDebug && (
-            <PipelineDebugPanel debug={narrative.pipelineDebug} />
-          )}
         </div>
       )}
     </div>
@@ -489,7 +512,7 @@ function DiversityBar({ label, data }: { label: string; data: Record<string, num
             <span className="text-[10px] text-zinc-500 w-28 shrink-0 font-mono truncate">{k}</span>
             <div className="flex-1 h-1.5 rounded-full bg-zinc-800">
               <div
-                className="h-1.5 rounded-full bg-violet-600"
+                className="h-1.5 rounded-full bg-pink-600"
                 style={{ width: `${total > 0 ? (v / total) * 100 : 0}%` }}
               />
             </div>
@@ -505,8 +528,8 @@ function DiversityBar({ label, data }: { label: string; data: Record<string, num
 
 function EntityBox({ explanation }: { explanation: EntityExplanation }) {
   return (
-    <div className="rounded-xl border border-violet-800/30 bg-violet-950/10 p-4 mt-4">
-      <p className="text-[10px] font-mono text-violet-400 uppercase tracking-widest mb-2">
+    <div className="rounded-xl border border-pink-800/30 bg-pink-950/10 p-4 mt-4">
+      <p className="text-[10px] font-mono text-pink-400 uppercase tracking-widest mb-2">
         A Entidade · Explicação
       </p>
       <p className="text-xs text-zinc-300 leading-relaxed mb-3">{explanation.reasoning}</p>
@@ -537,11 +560,11 @@ function EntityBox({ explanation }: { explanation: EntityExplanation }) {
         </div>
       </div>
       {explanation.hypothesesActive.length > 0 && (
-        <div className="mt-3 border-t border-violet-800/20 pt-2">
+        <div className="mt-3 border-t border-pink-800/20 pt-2">
           <p className="text-[10px] text-zinc-600 mb-1">Hipóteses aplicadas</p>
           <div className="flex flex-wrap gap-1">
             {explanation.hypothesesActive.map((h) => (
-              <span key={h} className="text-[10px] font-mono text-violet-300 bg-violet-950/30 border border-violet-800/30 px-1.5 py-0.5 rounded">
+              <span key={h} className="text-[10px] font-mono text-pink-300 bg-pink-950/30 border border-pink-800/30 px-1.5 py-0.5 rounded">
                 {h}
               </span>
             ))}
@@ -588,7 +611,7 @@ function PromoteModal({
               value={form.campaignName}
               onChange={(e) => setForm((f) => ({ ...f, campaignName: e.target.value }))}
               placeholder="Ex: Shopee — Novembro 2026"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -597,7 +620,7 @@ function PromoteModal({
               <select
                 value={form.marketplace}
                 onChange={(e) => setForm((f) => ({ ...f, marketplace: e.target.value }))}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
               >
                 <option value="shopee">Shopee</option>
                 <option value="amazon">Amazon</option>
@@ -611,7 +634,7 @@ function PromoteModal({
               <select
                 value={form.targetNetwork}
                 onChange={(e) => setForm((f) => ({ ...f, targetNetwork: e.target.value }))}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
               >
                 <option value="threads">Threads</option>
                 <option value="twitter">Twitter/X</option>
@@ -632,7 +655,7 @@ function PromoteModal({
             Cancelar
           </Button>
           <Button
-            className="flex-1 gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+            className="flex-1 gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
             onClick={() => onSubmit(form)}
             disabled={!form.campaignName.trim() || promoting}
           >
@@ -724,7 +747,7 @@ function ProductSelector({
           <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 text-center">
             <Package className="h-6 w-6 text-zinc-600 mx-auto mb-2" />
             <p className="text-xs text-zinc-500 mb-2">Nenhum produto no catálogo ainda.</p>
-            <button onClick={() => onSetMode("import")} className="text-xs text-violet-400 hover:underline">
+            <button onClick={() => onSetMode("import")} className="text-xs text-pink-400 hover:underline">
               Importar um produto
             </button>
           </div>
@@ -733,7 +756,7 @@ function ProductSelector({
             <select
               value={selectedId}
               onChange={(e) => onSelectId(e.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
             >
               <option value="">— Selecione um produto —</option>
               {products.map((p) => (
@@ -771,14 +794,14 @@ function ProductSelector({
             value={importUrl}
             onChange={(e) => { setImportUrl(e.target.value); setImportError(null); }}
             placeholder="https://shopee.com.br/produto-i.123.456"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
           />
           {importError && <p className="text-xs text-red-400">{importError}</p>}
           <Button
             onClick={handleImport}
             disabled={importing || !importUrl}
             size="sm"
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2"
+            className="w-full bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white gap-2"
           >
             {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             {importing ? "Importando…" : "Importar e usar"}
@@ -796,7 +819,7 @@ function ProductSelector({
               value={tempName}
               onChange={(e) => onSetTempName(e.target.value)}
               placeholder="Nome do produto"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
             />
           </div>
           <div>
@@ -806,7 +829,7 @@ function ProductSelector({
               value={tempUrl}
               onChange={(e) => onSetTempUrl(e.target.value)}
               placeholder="https://..."
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
             />
           </div>
           <p className="col-span-2 text-[10px] text-zinc-600">
@@ -834,6 +857,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LabResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasGenerated, setHasGenerated] = useState(false);
 
   // Product selector state
   const [productMode, setProductMode] = useState<ProductMode>(initialMode);
@@ -921,6 +945,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
       }
       const data = await res.json() as LabResult;
       setResult(data);
+      setHasGenerated(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro desconhecido");
     } finally {
@@ -935,6 +960,12 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
       marketplace: "shopee",
       targetNetwork: "threads",
     });
+  }
+
+  function openPromoteAll(narratives: LabNarrative[]) {
+    const narrative = narratives[0];
+    if (!narrative) return;
+    setPromoteData({ narrative, narratives, campaignName: `${productName} — Lab`, marketplace: "shopee", targetNetwork: "threads" });
   }
 
   async function submitPromote(data: PromoteModal) {
@@ -960,6 +991,13 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           conflictType: data.narrative.conflictType,
           questionType: data.narrative.questionType,
           posts: data.narrative.posts,
+          narratives: (data.narratives ?? [data.narrative]).map((narrative) => ({
+            narratorId: narrative.narratorId || undefined,
+            hook: narrative.hook, narrativeSummary: narrative.narrativeSummary,
+            productStrategy: narrative.productStrategy, tone: narrative.tone, rhythm: narrative.rhythm,
+            structureType: narrative.structureType, openingStyle: narrative.openingStyle,
+            conflictType: narrative.conflictType, questionType: narrative.questionType, posts: narrative.posts,
+          })),
         }),
       });
       if (!res.ok) throw new Error("Falha ao promover");
@@ -995,7 +1033,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
       <select
         value={narratorId}
         onChange={(e) => { setNarratorId(e.target.value); setResult(null); }}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
       >
         {narrators.length === 0 && <option value="">Nenhum narrador cadastrado</option>}
         {narrators.map((n) => (
@@ -1006,6 +1044,34 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
       </select>
     </div>
   );
+
+  if (narrators.length === 0) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center px-6">
+        <div className="max-w-sm text-center space-y-4 py-20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 mx-auto">
+            <User className="h-8 w-8 text-zinc-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-100 mb-2">Nenhum Narrador ainda</h2>
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              O Laboratório precisa de pelo menos um Narrador para gerar histórias.
+              Crie o primeiro em 2 minutos respondendo um quiz rápido.
+            </p>
+          </div>
+          <Button asChild className="gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white">
+            <Link href="/narradores/novo">
+              <Plus className="h-4 w-4" />
+              Criar primeiro Narrador
+            </Link>
+          </Button>
+          <p className="text-xs text-zinc-600">
+            Depois de criar, volte aqui para gerar narrativas.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1023,7 +1089,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* Header */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-1">
-              <FlaskConical className="h-5 w-5 text-violet-400" />
+              <FlaskConical className="h-5 w-5 text-pink-400" />
               <h1 className="text-lg font-semibold text-zinc-100">Laboratório Narrativo</h1>
             </div>
             <p className="text-sm text-zinc-500">
@@ -1042,7 +1108,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                   className={cn(
                     "flex items-center gap-2 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap",
                     section === s.id
-                      ? "border-violet-500 text-violet-400"
+                      ? "border-pink-500 text-pink-400"
                       : "border-transparent text-zinc-500 hover:text-zinc-300"
                   )}
                 >
@@ -1056,6 +1122,51 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
           {/* ── SECTION: Testar Narrador ─────────────────────────────── */}
           {section === "testar" && (
             <div className="space-y-4">
+
+              {/* First-time guide — shown until the user generates something */}
+              {!hasGenerated && (
+                <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4">
+                  <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">
+                    Como funciona — 3 passos
+                  </p>
+                  <div className="space-y-2.5">
+                    {[
+                      {
+                        n: "1",
+                        text: "Escolha o Narrador — ele define a voz e o personagem da história",
+                        done: !!narratorId,
+                      },
+                      {
+                        n: "2",
+                        text: "Selecione \"Story + Produto\" e importe ou escolha um produto do catálogo",
+                        done: productMode === "select" ? !!selectedProductId : (!!tempProductName && !!tempProductUrl),
+                      },
+                      {
+                        n: "3",
+                        text: "Clique em \"Gerar\" — a IA cria posts prontos para publicar em segundos",
+                        done: false,
+                      },
+                    ].map(({ n, text, done }) => (
+                      <div key={n} className="flex items-start gap-3">
+                        <span
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold border",
+                            done
+                              ? "border-emerald-600/40 bg-emerald-950/30 text-emerald-400"
+                              : "border-zinc-700 bg-zinc-800 text-zinc-500"
+                          )}
+                        >
+                          {done ? "✓" : n}
+                        </span>
+                        <p className={cn("text-xs leading-relaxed", done ? "text-zinc-400 line-through" : "text-zinc-300")}>
+                          {text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
                 {NarratorSelect}
 
@@ -1078,7 +1189,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         className={cn(
                           "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
                           contentMode === opt.value
-                            ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                            ? "border-pink-600 bg-pink-600/20 text-pink-300"
                             : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600"
                         )}
                       >
@@ -1106,7 +1217,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                       value={customTheme}
                       onChange={(e) => setCustomTheme(e.target.value)}
                       placeholder="Ex: Crie histórias sobre gatos abandonados"
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
                     />
                     <p className="text-[10px] text-zinc-600 mt-1">
                       Deixe em branco para usar o tema padrão (traição, fofoca, família).
@@ -1124,7 +1235,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         className={cn(
                           "w-10 h-8 rounded-lg text-sm font-medium border transition-colors",
                           count === n
-                            ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                            ? "border-pink-600 bg-pink-600/20 text-pink-300"
                             : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600"
                         )}
                       >
@@ -1136,7 +1247,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <Button
                   onClick={() => void generate("single")}
                   disabled={loading || narrators.length === 0}
-                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
                   {loading ? "Gerando…" : `Gerar ${count} narrativa${count > 1 ? "s" : ""}`}
@@ -1147,10 +1258,38 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
 
               {result && (
                 <div className="space-y-3">
+                  {result.warning && (
+                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+                      {result.warning}
+                    </p>
+                  )}
+                  {result.narratives.length > 1 && (
+                    <Button type="button" variant="outline" className="w-full gap-2 border-pink-700/50 text-pink-300" onClick={() => openPromoteAll(result.narratives)}>
+                      <Rocket className="h-4 w-4" />
+                      Criar uma campanha com as {result.narratives.length} narrativas
+                    </Button>
+                  )}
                   {result.narratives.map((n) => (
                     <NarrativeCard key={n.id} narrative={n} onPromote={openPromote} />
                   ))}
                   {result.entityExplanation && <EntityBox explanation={result.entityExplanation} />}
+
+                  {/* Next step block — shown after first generation */}
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 flex items-center justify-between gap-4 mt-2">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-100 mb-0.5">Próximo passo</p>
+                      <p className="text-xs text-zinc-400">
+                        Gostou? Crie uma campanha para publicar essas histórias e rastrear cliques e conversões.
+                      </p>
+                    </div>
+                    <Link
+                      href="/campanhas/nova"
+                      className="shrink-0 flex items-center gap-1.5 rounded-lg border border-pink-700/40 bg-pink-950/20 text-pink-300 hover:bg-pink-950/40 text-xs font-medium px-3 py-2 transition-colors"
+                    >
+                      <Megaphone className="h-3.5 w-3.5" />
+                      Nova Campanha
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -1172,7 +1311,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         className={cn(
                           "w-12 h-8 rounded-lg text-sm font-medium border transition-colors",
                           benchmarkCount === n
-                            ? "border-violet-600 bg-violet-600/20 text-violet-300"
+                            ? "border-pink-600 bg-pink-600/20 text-pink-300"
                             : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600"
                         )}
                       >
@@ -1184,7 +1323,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <Button
                   onClick={() => void generate("benchmark")}
                   disabled={loading || narrators.length === 0}
-                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
                   {loading ? "Analisando…" : `Analisar diversidade (${benchmarkCount} narrativas)`}
@@ -1208,7 +1347,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                       <p className="text-xs text-zinc-500 mt-1">Similaridade média</p>
                     </div>
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-center">
-                      <p className="text-2xl font-bold text-violet-400">
+                      <p className="text-2xl font-bold text-pink-400">
                         {Object.keys(result.benchmark.diversity.emotions).length}
                       </p>
                       <p className="text-xs text-zinc-500 mt-1">Emoções distintas</p>
@@ -1253,14 +1392,14 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         className={cn(
                           "w-full flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
                           compareIds.includes(n.id)
-                            ? "border-violet-600/50 bg-violet-950/20 text-zinc-100"
+                            ? "border-pink-600/50 bg-pink-950/20 text-zinc-100"
                             : "border-zinc-800 bg-zinc-800/40 text-zinc-400 hover:border-zinc-700"
                         )}
                       >
                         <div
                           className={cn(
                             "h-4 w-4 rounded border flex items-center justify-center shrink-0",
-                            compareIds.includes(n.id) ? "border-violet-500 bg-violet-600" : "border-zinc-600"
+                            compareIds.includes(n.id) ? "border-pink-500 bg-pink-600" : "border-zinc-600"
                           )}
                         >
                           {compareIds.includes(n.id) && (
@@ -1281,7 +1420,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <Button
                   onClick={() => void generate("compare")}
                   disabled={loading || compareIds.length < 2}
-                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCompare className="h-4 w-4" />}
                   {loading ? "Gerando…" : `Comparar ${compareIds.length} narrador${compareIds.length !== 1 ? "es" : ""}`}
@@ -1294,7 +1433,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <div className="space-y-3">
                   {result.narratives.map((n) => (
                     <div key={n.id}>
-                      <p className="text-xs font-semibold text-violet-400 mb-1.5 px-1">
+                      <p className="text-xs font-semibold text-pink-400 mb-1.5 px-1">
                         {n.narratorName}
                       </p>
                       <NarrativeCard narrative={n} onPromote={openPromote} />
@@ -1314,7 +1453,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <Button
                   onClick={() => void generate("strategy")}
                   disabled={loading || narrators.length === 0}
-                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                   {loading ? "Gerando…" : "Gerar as 3 estratégias"}
@@ -1359,7 +1498,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 <Button
                   onClick={() => void generate("exploration")}
                   disabled={loading || narrators.length === 0}
-                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
                   {loading ? "Gerando 4 variantes…" : "Gerar controle + leve + direta + emocional"}
@@ -1436,7 +1575,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         <p className="text-[10px] text-zinc-500">CTR médio</p>
                       </div>
                       <div className="rounded-lg bg-zinc-800/60 p-3 text-center">
-                        <p className="text-lg font-bold text-violet-400">
+                        <p className="text-lg font-bold text-pink-400">
                           {selectedNarrator.hypotheses.filter((h) => h.status === "winner").length}
                         </p>
                         <p className="text-[10px] text-zinc-500">hipóteses ganhas</p>
@@ -1446,19 +1585,19 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                     {/* Insights */}
                     {selectedNarrator.insights.length > 0 && (
                       <div className="mb-4">
-                        <p className="text-[10px] font-mono text-violet-400 uppercase tracking-widest mb-2">
+                        <p className="text-[10px] font-mono text-pink-400 uppercase tracking-widest mb-2">
                           A Entidade observou
                         </p>
                         <div className="space-y-2">
                           {selectedNarrator.insights.map((ins) => (
                             <div key={ins.id} className="flex items-start gap-2.5">
-                              <div className="h-1 w-1 rounded-full bg-violet-500 shrink-0 mt-1.5" />
+                              <div className="h-1 w-1 rounded-full bg-pink-500 shrink-0 mt-1.5" />
                               <div className="min-w-0">
                                 <p className="text-xs text-zinc-300">{ins.body}</p>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <div className="h-1 bg-zinc-700 rounded-full flex-1">
                                     <div
-                                      className="h-1 rounded-full bg-violet-600"
+                                      className="h-1 rounded-full bg-pink-600"
                                       style={{ width: `${ins.confidence}%` }}
                                     />
                                   </div>

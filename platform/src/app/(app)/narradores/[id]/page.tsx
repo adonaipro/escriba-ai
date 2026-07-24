@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, CheckCircle2, Clock, XCircle, TrendingUp,
-  FlaskConical, Lightbulb, BarChart3, Megaphone, Link2,
+  FlaskConical, Lightbulb, BarChart3, Megaphone, Link2, ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeNarrator } from "@/lib/narrators/names";
@@ -15,7 +15,7 @@ import { AccountNarratorActions } from "./account-narrator-actions";
 const STRATEGY_META: Record<string, { label: string; description: string; color: string }> = {
   clickbait:  { label: "Clickbait",   description: "Produto como gatilho de curiosidade",       color: "text-amber-400" },
   contextual: { label: "Contextual",  description: "Produto coerente com o universo da história", color: "text-blue-400" },
-  hybrid:     { label: "Híbrida",     description: "Produto nasce como consequência natural",     color: "text-violet-400" },
+  hybrid:     { label: "Híbrida",     description: "Produto nasce como consequência natural",     color: "text-pink-400" },
 };
 
 export default async function NarradorDetailPage({
@@ -86,6 +86,8 @@ export default async function NarradorDetailPage({
   const totalImp = narrator.totalImpressions;
   const overallCtr = totalImp > 0 ? (narrator.totalClicks / totalImp) * 100 : 0;
 
+  const isNewNarrator = narrator._count.trends === 0 && narrator.campaigns.length === 0;
+
   return (
     <div className="space-y-6">
       {/* Back */}
@@ -96,6 +98,27 @@ export default async function NarradorDetailPage({
         <ArrowLeft className="h-4 w-4" />
         Narradores
       </Link>
+
+      {/* Onboarding banner — shown only when narrator has no stories yet */}
+      {isNewNarrator && (
+        <div className="rounded-xl border border-pink-800/30 bg-pink-950/10 p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-zinc-100 mb-0.5">
+              {narrator.name} está pronta para narrar
+            </p>
+            <p className="text-xs text-zinc-400">
+              Vá ao Laboratório, escolha um produto e gere a primeira história. Leva menos de 1 minuto.
+            </p>
+          </div>
+          <Link
+            href="/laboratorio"
+            className="shrink-0 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white text-xs font-medium px-3 py-2 transition-colors"
+          >
+            Ir ao Lab
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -136,8 +159,8 @@ export default async function NarradorDetailPage({
       </div>
 
       {/* Entidade voice */}
-      <div className="rounded-lg border border-l-2 border-violet-800/30 border-l-violet-500 bg-zinc-900/50 p-4">
-        <p className="text-xs text-violet-400 font-mono mb-2 tracking-wide">A ENTIDADE SOBRE {narrator.name.toUpperCase()}</p>
+      <div className="rounded-lg border border-l-2 border-pink-800/30 border-l-pink-500 bg-zinc-900/50 p-4">
+        <p className="text-xs text-pink-400 font-mono mb-2 tracking-wide">A ENTIDADE SOBRE {narrator.name.toUpperCase()}</p>
         <p className="text-sm text-zinc-300 font-mono leading-relaxed">
           {hypothesisSummary.winners.length > 0
             ? `Já identifiquei ${hypothesisSummary.winners.length} padrão${hypothesisSummary.winners.length > 1 ? "ões" : ""} vencedor${hypothesisSummary.winners.length > 1 ? "es" : ""} para ${narrator.name}. Estou priorizando esses valores nas próximas gerações.`
@@ -210,7 +233,7 @@ export default async function NarradorDetailPage({
                       </div>
                       <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-violet-500/60 transition-all"
+                          className="h-full rounded-full bg-pink-500/60 transition-all"
                           style={{ width: count > 0 ? `${Math.min(ctr * 10, 100)}%` : "0%" }}
                         />
                       </div>
@@ -230,7 +253,7 @@ export default async function NarradorDetailPage({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            <FlaskConical className="h-4 w-4 text-violet-400" />
+            <FlaskConical className="h-4 w-4 text-pink-400" />
             Experimentos Ativos — todas as dimensões
           </CardTitle>
         </CardHeader>

@@ -10,6 +10,31 @@ export { AnthropicProvider } from "./providers/anthropic";
 export { OpenRouterProvider } from "./providers/openrouter";
 export type { NarrativeInput, NarrativeOutput, LlmProvider, LlmProviderConfig } from "./types";
 
+/**
+ * Resolve the effective LLM config for a profile:
+ * 1. User's own BYOK key (if apiKey is set)
+ * 2. Platform key from ESCRIBA_GROQ_API_KEY env var
+ * 3. null → falls back to SimulatedProvider
+ */
+export function resolveEffectiveLlmConfig(
+  userConfig: { provider: string; apiKey: string; model: string; baseUrl: string } | null,
+): LlmProviderConfig | null {
+  const hasByok = !!(userConfig?.apiKey && userConfig.provider && userConfig.provider !== "simulated");
+  if (hasByok) {
+    return {
+      provider: userConfig!.provider as LlmProviderConfig["provider"],
+      apiKey:   userConfig!.apiKey   || undefined,
+      model:    userConfig!.model    || undefined,
+      baseUrl:  userConfig!.baseUrl  || undefined,
+    };
+  }
+  const platformKey = process.env.ESCRIBA_GROQ_API_KEY;
+  if (platformKey) {
+    return { provider: "groq", apiKey: platformKey, model: "llama-3.3-70b-versatile" };
+  }
+  return null;
+}
+
 export function getLlmProvider(config?: LlmProviderConfig | null): LlmProvider {
   if (!config || config.provider === "simulated" || !config.apiKey) {
     return new SimulatedProvider();

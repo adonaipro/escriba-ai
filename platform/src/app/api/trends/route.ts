@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { z } from "zod";
 import { generateTrend } from "@/lib/engines/trend-engine";
 import { ACCOUNT_COOKIE } from "@/lib/account";
+import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
 
 const createSchema = z.object({
   campaignId: z.string().min(1),
@@ -73,6 +74,10 @@ export async function POST(request: NextRequest) {
       campaignId: campaign.id,
     });
 
+    if (campaign.targetNetwork === "threads") {
+      assertThreadsPostsWithinLimit(generated.posts);
+    }
+
     const trend = await prisma.trend.create({
       data: {
         campaignId: campaign.id,
@@ -103,6 +108,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
+    }
+    if (error instanceof Error && /limite de 500 caracteres/i.test(error.message)) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error("Create trend error:", error);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

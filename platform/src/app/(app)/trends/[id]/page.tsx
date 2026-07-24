@@ -121,7 +121,7 @@ export default function TrendDetailPage() {
             <Badge variant={cfg.variant}>{cfg.label}</Badge>
             <span className="text-xs text-zinc-500">{formatLabel(trend.format)}</span>
             {trend.qualityScore && (
-              <span className="text-xs text-violet-400">
+              <span className="text-xs text-pink-400">
                 {Math.round(trend.qualityScore * 100)}% qualidade
               </span>
             )}

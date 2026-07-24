@@ -6,6 +6,11 @@
 
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
+import {
+  THREADS_TEXT_MAX_CHARS,
+  assertThreadsPostsWithinLimit,
+  measureThreadsTextLength,
+} from "@/lib/publishing/threads-limits";
 
 export type SingleContentMode = "desabafo" | "polemica" | "pergunta";
 
@@ -216,8 +221,27 @@ export async function generateContentPost(
 
   void buildAudienceCtx(universe); // universe kept for potential future use
   const { system, userTpl } = PROMPTS[contentMode];
-  const raw  = await call(system, userTpl(), config, ctx, seed);
-  const post = extractPost(raw);
+  const baseUser = userTpl();
+  const systemWithLimit = `${system}
+
+Limite obrigatório: o post final deve ter no máximo ${THREADS_TEXT_MAX_CHARS} caracteres.`;
+  let raw = await call(systemWithLimit, baseUser, config, ctx, seed);
+  let post = extractPost(raw);
+
+  if (measureThreadsTextLength(post) > THREADS_TEXT_MAX_CHARS) {
+    const retryUser = `${baseUser}
+
+A resposta anterior tinha ${measureThreadsTextLength(post)} caracteres (limite ${THREADS_TEXT_MAX_CHARS}).
+Reescreva o MESMO post com no máximo ${THREADS_TEXT_MAX_CHARS} caracteres, sem perder a ideia central.`;
+    try {
+      raw = await call(systemWithLimit, retryUser, config, ctx, seed + 1);
+      post = extractPost(raw);
+    } catch {
+      // fall through to assert
+    }
+  }
+
+  assertThreadsPostsWithinLimit([{ position: 1, content: post }]);
 
   return {
     post,

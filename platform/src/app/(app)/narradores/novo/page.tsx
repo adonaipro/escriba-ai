@@ -137,19 +137,29 @@ export default function NarradorNovoPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-950/40 border border-emerald-800/40 mx-auto mb-6">
             <Check className="h-8 w-8 text-emerald-400" />
           </div>
-          <h2 className="text-2xl font-bold text-zinc-100 mb-2">{created.name} foi criada</h2>
-          <p className="text-sm text-zinc-400 mb-2">
-            A IA gerou automaticamente os experimentos iniciais.
+          <h2 className="text-2xl font-bold text-zinc-100 mb-2">{created.name} criada!</h2>
+          <p className="text-sm text-zinc-400 mb-6">
+            A IA definiu automaticamente os experimentos iniciais de tom, ritmo e estratégia de conteúdo.
           </p>
-          <p className="text-xs text-zinc-600 mb-8">
-            Tom · Ritmo · Estratégia de Produto · Pergunta Final · Tipo de Conflito · Abertura · Estrutura
-          </p>
+
+          {/* Next step callout */}
+          <div className="rounded-xl border border-pink-800/30 bg-pink-950/10 p-4 mb-6 text-left">
+            <p className="text-xs text-pink-400 font-medium mb-1">Próximo passo</p>
+            <p className="text-sm text-zinc-300">
+              Vá ao <strong>Laboratório</strong> e gere sua primeira história com {created.name}.
+              Leva menos de 30 segundos.
+            </p>
+          </div>
+
           <div className="flex flex-col gap-3">
-            <Button asChild>
-              <Link href={`/narradores/${created.id}`}>Ver {created.name}</Link>
+            <Button asChild className="gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white">
+              <Link href="/laboratorio">
+                <ArrowRight className="h-4 w-4" />
+                Testar no Laboratório
+              </Link>
             </Button>
             <Button variant="outline" asChild>
-              <Link href="/narradores">Voltar para Narradores</Link>
+              <Link href={`/narradores/${created.id}`}>Ver perfil de {created.name}</Link>
             </Button>
           </div>
         </div>
@@ -178,7 +188,7 @@ export default function NarradorNovoPage() {
         </div>
         <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
           <div
-            className="h-full rounded-full bg-violet-500 transition-all duration-300"
+            className="h-full rounded-full bg-pink-500 transition-all duration-300"
             style={{ width: `${((step + (selected ? 1 : 0)) / STEPS.length) * 100}%` }}
           />
         </div>
@@ -200,7 +210,7 @@ export default function NarradorNovoPage() {
             onClick={() => selectOption(opt.value)}
             className={`rounded-xl border px-4 py-3 text-left transition-all ${
               selected === opt.value
-                ? "border-violet-500 bg-violet-950/30 text-zinc-100"
+                ? "border-pink-500 bg-pink-950/30 text-zinc-100"
                 : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
             }`}
           >
@@ -212,7 +222,7 @@ export default function NarradorNovoPage() {
                 )}
               </div>
               {selected === opt.value && (
-                <div className="h-4 w-4 rounded-full bg-violet-500 flex items-center justify-center shrink-0">
+                <div className="h-4 w-4 rounded-full bg-pink-500 flex items-center justify-center shrink-0">
                   <Check className="h-2.5 w-2.5 text-white" />
                 </div>
               )}

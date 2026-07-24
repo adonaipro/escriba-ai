@@ -17,8 +17,9 @@ export default async function ConfiguracoesPage() {
 
   const llmConfig = await prisma.llmConfig.findUnique({
     where: { profileId: profile.id },
-    select: { provider: true, model: true, baseUrl: true },
+    select: { provider: true, model: true, baseUrl: true, apiKey: true },
   });
+  const hasByok = !!(llmConfig?.apiKey && llmConfig.provider && llmConfig.provider !== "simulated");
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -43,6 +44,7 @@ export default async function ConfiguracoesPage() {
           provider: llmConfig?.provider ?? "groq",
           model: llmConfig?.model ?? "",
           baseUrl: llmConfig?.baseUrl ?? "",
+          hasByok,
         }}
       />
 
@@ -92,14 +94,8 @@ export default async function ConfiguracoesPage() {
               <span className="text-zinc-300">0.2.0-narrative</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">Banco de dados</span>
-              <span className="text-zinc-300">SQLite (dev) → PostgreSQL (prod)</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Narrative Engine</span>
-              <Badge variant={llmConfig && llmConfig.provider !== "simulated" ? "success" : "warning"}>
-                {llmConfig && llmConfig.provider !== "simulated" ? llmConfig.provider : "Modo simulado"}
-              </Badge>
+              <span className="text-zinc-500">Motor Narrativo</span>
+              <Badge variant="success">Escriba AI Engine</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">ID da conta</span>
