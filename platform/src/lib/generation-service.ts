@@ -1,7 +1,10 @@
 import { prisma } from "./db";
-import { getLlmProvider } from "./llm";
-import type { LlmProviderConfig, NarrativeInput, NarratorContext } from "./llm/types";
+import { getLlmProvider, resolveEffectiveLlmConfig } from "./llm";
+import type { NarrativeInput, NarrativeOutput, NarratorContext } from "./llm/types";
 import { selectHypothesisValue } from "./narrators/hypothesis-engine";
+import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
+import { buildNarrativeLLM } from "./llm/narrative-engine";
+import type { ContentMode } from "./llm/pipeline-types";
 
 type HypothesisDimension = "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType";
 const DIMENSIONS: HypothesisDimension[] = ["tone", "rhythm", "productStrategy", "questionType", "conflictType", "openingStyle", "structureType"];
@@ -136,16 +139,17 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     const { campaign } = job;
     const profileId = campaign.profileId;
 
-    // Fetch LLM config
+    // Same effective LLM resolution as Laboratório:
+    // 1) BYOK  2) ESCRIBA_GROQ_API_KEY  3) null → simulated
     const llmConfigRow = await prisma.llmConfig.findUnique({ where: { profileId } });
-    const llmConfig: LlmProviderConfig | null = llmConfigRow
-      ? {
-          provider: llmConfigRow.provider,
-          apiKey: llmConfigRow.apiKey || undefined,
-          model: llmConfigRow.model || undefined,
-          baseUrl: llmConfigRow.baseUrl || undefined,
-        }
-      : null;
+    const llmConfig = resolveEffectiveLlmConfig(llmConfigRow);
+    const hasByok = !!(
+      llmConfigRow?.apiKey &&
+      llmConfigRow.provider &&
+      llmConfigRow.provider !== "simulated"
+    );
+    const llmSource = hasByok ? "byok" : llmConfig ? "platform" : "simulated";
+    console.log(`[generation-job ${jobId}] llm_source: ${llmSource}`);
 
     // Fetch learnings for context
     const learnings = await prisma.learning.findMany({
@@ -221,19 +225,24 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     let contentMode: string | undefined;
     let productName = campaign.productName;
     let productUrl  = campaign.productUrl;
+    const trendCount = await prisma.trend.count({ where: { campaignId: campaign.id } });
 
     if (campaign.customSchedule) {
       try {
         const sched = JSON.parse(campaign.customSchedule) as {
           contentMode?: string;
+          editorialModes?: string[];
           products?: { name: string; url: string }[];
         };
         contentMode = sched.contentMode;
+        if (contentMode === "mix-editorial" && sched.editorialModes?.length) {
+          contentMode = sched.editorialModes[trendCount % sched.editorialModes.length];
+        }
 
         // Multi-product rotation: pick next product based on how many trends exist already
         if (sched.products && sched.products.length > 1) {
-          const trendCount = await prisma.trend.count({ where: { campaignId: campaign.id } });
-          const idx = trendCount % sched.products.length;
+          const editorialCount = sched.editorialModes?.length || 1;
+          const idx = Math.floor(trendCount / editorialCount) % sched.products.length;
           const picked = sched.products[idx];
           if (picked) {
             productName = picked.name;
@@ -270,7 +279,31 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 55,
     });
 
-    const output = await provider.generateNarrative(input);
+    const generated = llmConfig
+      ? await buildNarrativeLLM(
+          productName, productUrl, Date.now() + trendCount * 137,
+          narratorContext, undefined, undefined, llmConfig,
+          narratorContext ? {
+            name: narratorContext.name, sex: narratorContext.sex, ageRange: narratorContext.ageRange,
+            maritalStatus: narratorContext.maritalStatus, hasChildren: narratorContext.hasChildren,
+            livesAlone: narratorContext.livesAlone,
+          } : undefined,
+          undefined, contentMode as ContentMode | undefined,
+        )
+      : await provider.generateNarrative(input);
+    const output: NarrativeOutput = "format" in generated ? generated : {
+      hook: generated.hook, narrativeSummary: generated.narrativeSummary,
+      format: generated.structureType || generated.family || "staircase",
+      family: generated.family, emotion: generated.emotion, character: generated.role,
+      setting: generated.setting, object: generated.conflictObject,
+      conflict: generated.narrativeSummary, twist: generated.twist,
+      role: generated.role, conflictObject: generated.conflictObject,
+      sceneMoment: generated.sceneMoment, moralQuestion: generated.moralQuestion,
+      productPosition: generated.productPosition, productStrategy: generated.productStrategy,
+      tone: generated.tone, rhythm: generated.rhythm, structureType: generated.structureType,
+      openingStyle: generated.openingStyle, conflictType: generated.conflictType,
+      questionType: generated.questionType, posts: generated.posts,
+    };
 
     await updateJob(jobId, {
       status: "writing",
@@ -287,6 +320,7 @@ export async function processGenerationJob(jobId: string): Promise<void> {
         campaignId: campaign.id,
         narratorId: narrator?.id ?? undefined,
         format: output.format,
+        contentMode: contentMode ?? undefined,
         hook: output.hook,
         narrativeSummary: output.narrativeSummary,
         postsCount: output.posts.length,
@@ -312,6 +346,21 @@ export async function processGenerationJob(jobId: string): Promise<void> {
           hasMedia: p.hasMedia,
         },
       });
+    }
+
+    if (campaign.approvalMode === "auto") {
+      let slot = job.targetSlot;
+      if (!slot) {
+        const latest = await prisma.trend.findFirst({
+          where: { campaignId: campaign.id, scheduledAt: { not: null } },
+          orderBy: { scheduledAt: "desc" }, select: { scheduledAt: true },
+        });
+        const now = new Date();
+        const campaignStart = campaign.startDate && campaign.startDate > now ? campaign.startDate : now;
+        const after = latest?.scheduledAt && latest.scheduledAt > campaignStart ? latest.scheduledAt : campaignStart;
+        slot = nextCampaignSlot(campaign.customSchedule, after);
+      }
+      if (slot) await scheduleTrend(trend.id, slot);
     }
 
     await updateJob(jobId, {
@@ -341,10 +390,11 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     ].filter((e) => e.value && e.value !== "undefined");
 
     for (const el of elements) {
+      if (!campaign.socialAccountId) continue;
       await prisma.narrativePattern.upsert({
-        where: { profileId_type_value: { profileId, type: el.type, value: el.value } },
+        where: { profileId_socialAccountId_type_value: { profileId, socialAccountId: campaign.socialAccountId, type: el.type, value: el.value } },
         update: { usageCount: { increment: 1 }, updatedAt: new Date() },
-        create: { profileId, type: el.type, value: el.value, usageCount: 1 },
+        create: { profileId, socialAccountId: campaign.socialAccountId, type: el.type, value: el.value, usageCount: 1 },
       });
     }
 
@@ -370,6 +420,7 @@ export async function processGenerationJob(jobId: string): Promise<void> {
           productStrategy,
           tone: output.tone,
           rhythm: output.rhythm,
+          contentMode,
         }),
       },
     });
