@@ -34,7 +34,7 @@ import { isInsufficientQuotaError } from "./api-error";
 
 export type { StoryDebugData };
 
-const PROMPT_VERSION = "story-v2-identification";
+const PROMPT_VERSION = "story-v2.1-human-first";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -266,26 +266,18 @@ function resolveProductLink(posts: StoryPost[], productUrl: string, seed: number
     }));
   }
 
-  // Soft fallback only if the model forgot the link entirely
-  const fallbacks = [
-    `Dias depois alguém me mandou isso aqui:\n${productUrl}`,
-    `Deixaram isso em cima da mesa:\n${productUrl}`,
-    `Acabei pedindo isso sem pensar muito:\n${productUrl}`,
+  // Soft fallback: append URL to the last post only — never invent a narrative recipe
+  // (no "alguém trouxe / deixou / comprou" templates that the model would learn from).
+  void seed;
+  if (posts.length === 0) return [{ position: 1, content: productUrl }];
+  const last = posts[posts.length - 1]!;
+  return [
+    ...posts.slice(0, -1),
+    {
+      ...last,
+      content: `${last.content.trim()}\n${productUrl}`,
+    },
   ];
-  const content = fallbacks[seed % fallbacks.length]!;
-  const maxPos = posts.reduce((m, p) => Math.max(m, p.position), 0);
-
-  if (posts.length >= 2) {
-    const lastPost = posts[posts.length - 1]!;
-    const rest = posts.slice(0, -1);
-    return [
-      ...rest,
-      { position: maxPos, content },
-      { ...lastPost, position: maxPos + 1 },
-    ];
-  }
-
-  return [...posts, { position: maxPos + 1, content }];
 }
 
 // ─── Prompt builders (V2) ─────────────────────────────────────────────────────
@@ -294,20 +286,24 @@ function stripUrls(s: string): string {
   return s.replace(/https?:\/\/[^\s,)]+/g, "").trim();
 }
 
+/**
+ * Minimal product facts for accuracy only — never story drivers.
+ * Pains / benefits / occasions are intentionally omitted: they induce product-themed plots.
+ */
 function buildProductContext(universe: ProductUniverse, productName: string): string {
   const parts: string[] = [];
-  if (productName) parts.push(`Nome: ${stripUrls(productName)}`);
-  if (universe.categoryLabel) parts.push(`Categoria: ${stripUrls(universe.categoryLabel)}`);
-  if (universe.pains?.length) {
-    parts.push(`Dores / contexto de uso: ${universe.pains.slice(0, 4).map(stripUrls).filter(Boolean).join("; ")}`);
+  if (productName) parts.push(`Nome factual: ${stripUrls(productName)}`);
+  if (universe.categoryLabel) parts.push(`Tipo de item (fato): ${stripUrls(universe.categoryLabel)}`);
+  if (universe.restrictions?.length) {
+    const bans = universe.restrictions
+      .slice(0, 5)
+      .map(stripUrls)
+      .filter(Boolean);
+    if (bans.length) {
+      parts.push(`Não afirme sobre este item: ${bans.join("; ")}`);
+    }
   }
-  if (universe.benefits?.length) {
-    parts.push(`Benefícios: ${universe.benefits.slice(0, 3).map(stripUrls).filter(Boolean).join("; ")}`);
-  }
-  if (universe.occasions?.length) {
-    parts.push(`Ocasiões: ${universe.occasions.slice(0, 3).map(stripUrls).filter(Boolean).join("; ")}`);
-  }
-  return parts.join("\n") || stripUrls(productName);
+  return parts.join("\n") || `Nome factual: ${stripUrls(productName)}`;
 }
 
 function sexPromptLine(sex: string): string {
@@ -328,9 +324,17 @@ function buildSystemPrompt(): string {
 Objetivo único: identificação.
 No final da leitura, a pessoa deve pensar: "isso aconteceu comigo", "conheço alguém assim", "já passei por isso".
 
-Antes de escrever, responda mentalmente só isto:
-"Qual situação cotidiana faria milhares de pessoas se identificarem com essa história?"
-Parta dessa situação humana. Não parta de tema fixo, lista de conflitos ou fórmula pronta.
+Ordem mental obrigatória (não inverta):
+1) Primeiro: invente uma situação humana cotidiana que gere identificação em milhares de pessoas.
+   A história é sobre essa situação — pessoas, tensão, escolha, constrangimento, alívio, rotina, relação.
+2) Só depois: veja se e como um item da vida real (informado no user) pode aparecer dentro dessa situação já inventada.
+   O item é um elemento secundário da narrativa, nunca o tema central, nunca o motivo da história.
+
+Proibido:
+- partir do produto para inventar a história
+- fazer a trama ser "sobre o produto", "descobrir o produto" ou "mudar de vida por causa do produto"
+- usar o produto como conflito, gancho ou lição principal
+- copiar fórmulas de inserção (não invente receitas do tipo "alguém trouxe / ganhou / comprou / deixou o produto")
 
 Como escrever:
 - natural, cotidiana, espontânea, conversacional, plausível
@@ -361,19 +365,21 @@ function buildUserPrompt(opts: {
   const sexBlock = sexPromptLine(opts.sex);
 
   const productBlock = opts.withLink
-    ? `Produto (obrigatório na thread, de forma natural):
+    ? `Item que deve aparecer em algum momento da thread (elemento da cena, NÃO o tema):
 ${opts.productContext}
 
-O produto faz parte da vida real dessa pessoa — não interrompa a história para vender.
-O leitor não pode sentir propaganda.
-Integre o produto como algo que já fazia sentido naquela situação (alguém trouxe, mandou, usou, deixou, comprou no meio da vida).
-Use o marcador [LINK] exatamente assim (6 caracteres) no lugar da URL — não invente domínio nem descreva o que é o produto.
-Não force o produto no primeiro post se isso quebrar o relato.`
+Regras do item:
+- invente a situação humana PRIMEIRO; só então encaixe este item se couber de forma natural
+- o item não define o conflito, o título mental nem o desfecho moral
+- o leitor não pode sentir propaganda nem quebra para vender
+- use o marcador [LINK] exatamente com esses 6 caracteres no lugar da URL (não invente domínio)
+- não descreva o item como herói da história; no máximo um detalhe do ambiente/cena
+- se precisar nomear, use o nome factual; não invente benefícios milagrosos`
     : `Nesta história não use link de produto nem menção comercial.
 Foque só no relato humano identificável.`;
 
   const freeNote = opts.customTheme?.trim()
-    ? `\nPedido livre do usuário (opcional, não é um tema obrigatório rígido): ${opts.customTheme.trim()}\nUse só se ajudar a situação cotidiana de identificação.`
+    ? `\nPedido livre do usuário (opcional; não substitui a situação humana): ${opts.customTheme.trim()}`
     : "";
 
   return `${sexBlock}
@@ -381,7 +387,7 @@ Foque só no relato humano identificável.`;
 ${productBlock}
 ${freeNote}
 
-Gere uma thread original agora.`;
+Gere a thread: situação humana primeiro; item só como detalhe secundário.`;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
