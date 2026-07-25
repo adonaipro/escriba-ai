@@ -281,10 +281,12 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       where: { campaignId: campaign.id },
       orderBy: { createdAt: "desc" },
       take: 6,
-      select: { hook: true, narrativeSummary: true, setting: true },
+      select: { hook: true, narrativeSummary: true, conflictType: true, contentMode: true },
     });
     const avoidContexts = recentTrends
-      .map((t) => [t.setting, t.hook, t.narrativeSummary].filter(Boolean).join(" — "))
+      .map((t) =>
+        [t.contentMode, t.conflictType, t.hook, t.narrativeSummary].filter(Boolean).join(" — "),
+      )
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .slice(0, 6);
