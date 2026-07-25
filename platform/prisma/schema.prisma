@@ -539,6 +539,8 @@ model ShopeeConversion {
   orderId                String   @default("")
   orderStatus            String   @default("")
   itemId                 String   @default("")
+  /// Index within the order.items array so duplicate itemIds are not collapsed.
+  lineIndex              Int      @default(0)
   itemName               String   @default("")
   shopName               String   @default("")
   itemPrice              Float    @default(0)
@@ -550,7 +552,7 @@ model ShopeeConversion {
   updatedAt              DateTime @updatedAt
   profile                Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  @@unique([profileId, conversionId, orderId, itemId])
+  @@unique([profileId, conversionId, orderId, itemId, lineIndex])
   @@index([profileId, purchaseTime])
   @@index([profileId, orderStatus])
   @@index([profileId, itemId])

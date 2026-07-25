@@ -166,6 +166,7 @@ export async function syncShopeeConversions(
       orderId: string;
       orderStatus: string;
       itemId: string;
+      lineIndex: number;
       itemName: string;
       shopName: string;
       itemPrice: number;
@@ -186,7 +187,7 @@ export async function syncShopeeConversions(
 
       for (const order of orders) {
         const items = order.items?.length ? order.items : [{}];
-        for (const item of items) {
+        items.forEach((item, lineIndex) => {
           rows.push({
             profileId,
             conversionId,
@@ -201,6 +202,7 @@ export async function syncShopeeConversions(
             orderId: str(order.orderId),
             orderStatus: str(order.orderStatus).toUpperCase(),
             itemId: str(item.itemId),
+            lineIndex,
             itemName: item.itemName ?? "",
             shopName: item.shopName ?? "",
             itemPrice: num(item.itemPrice),
@@ -209,7 +211,7 @@ export async function syncShopeeConversions(
             attributionType: item.attributionType ?? null,
             lastSyncedAt: now,
           });
-        }
+        });
       }
     }
 
@@ -220,11 +222,12 @@ export async function syncShopeeConversions(
         batch.map((row) =>
           prisma.shopeeConversion.upsert({
             where: {
-              profileId_conversionId_orderId_itemId: {
+              profileId_conversionId_orderId_itemId_lineIndex: {
                 profileId: row.profileId,
                 conversionId: row.conversionId,
                 orderId: row.orderId,
                 itemId: row.itemId,
+                lineIndex: row.lineIndex,
               },
             },
             create: row,
