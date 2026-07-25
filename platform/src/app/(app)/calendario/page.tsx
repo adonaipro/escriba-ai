@@ -13,6 +13,7 @@ import {
   Brain,
   Check,
   X,
+  Download,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -208,6 +209,7 @@ export default function CalendarioPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"selected" | "all" | null>(null);
 
   // ── Fila state ──
   const [filaRange, setFilaRange] = useState<7 | 14 | 30>(7);
@@ -268,6 +270,38 @@ export default function CalendarioPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topView, filaRange]);
+
+  // ── Daily .txt export (selected day or today) ──
+  async function downloadDayExport(scope: "selected" | "all") {
+    const date =
+      selectedDay ??
+      format(new Date(), "yyyy-MM-dd");
+    setExporting(scope);
+    try {
+      const res = await fetch(
+        `/api/calendar/export?date=${encodeURIComponent(date)}&scope=${scope}`,
+      );
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error ?? "Falha ao exportar");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? `escriba-${date}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao baixar");
+    } finally {
+      setExporting(null);
+    }
+  }
 
   // ── Queue actions ──
   async function handleQueueAction(trendId: string, action: "approved" | "rejected") {
@@ -454,7 +488,41 @@ export default function CalendarioPage() {
                 {satAlerts.length} alerta{satAlerts.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!exporting}
+                onClick={() => void downloadDayExport("selected")}
+                title={
+                  selectedDay
+                    ? `Baixar publicações de ${selectedDay} (conta selecionada)`
+                    : "Baixar publicações de hoje (conta selecionada)"
+                }
+              >
+                {exporting === "selected" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">
+                  Baixar publicações do dia
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!exporting}
+                onClick={() => void downloadDayExport("all")}
+                title="Baixar publicações do dia — todas as contas do perfil"
+              >
+                {exporting === "all" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">Todas as contas</span>
+              </Button>
               <Button
                 variant={viewMode === "month" ? "default" : "outline"}
                 size="sm"
@@ -613,17 +681,47 @@ export default function CalendarioPage() {
               {selectedDay && (
                 <Card>
                   <CardContent className="p-4">
-                    <h3 className="text-sm font-semibold text-zinc-200 mb-3 capitalize">
-                      {format(
-                        new Date(selectedDay + "T12:00:00"),
-                        "EEEE, dd 'de' MMMM",
-                        { locale: ptBR }
-                      )}
-                      <span className="text-zinc-500 font-normal ml-2">
-                        — {selectedEvents.length} evento
-                        {selectedEvents.length !== 1 ? "s" : ""}
-                      </span>
-                    </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-zinc-200 capitalize">
+                        {format(
+                          new Date(selectedDay + "T12:00:00"),
+                          "EEEE, dd 'de' MMMM",
+                          { locale: ptBR }
+                        )}
+                        <span className="text-zinc-500 font-normal ml-2">
+                          — {selectedEvents.length} evento
+                          {selectedEvents.length !== 1 ? "s" : ""}
+                        </span>
+                      </h3>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!!exporting}
+                          onClick={() => void downloadDayExport("selected")}
+                        >
+                          {exporting === "selected" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          <span className="ml-1.5 text-xs">Baixar do dia</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!!exporting}
+                          onClick={() => void downloadDayExport("all")}
+                        >
+                          {exporting === "all" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          <span className="ml-1.5 text-xs">Todas as contas</span>
+                        </Button>
+                      </div>
+                    </div>
                     {selectedEvents.length === 0 ? (
                       <p className="text-sm text-zinc-500">Nenhum evento nesse dia.</p>
                     ) : (
