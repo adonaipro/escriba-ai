@@ -97,19 +97,27 @@ const MODE_HINT: Record<SingleContentMode, string> = {
   polemica:
     "Formato: uma opinião afiada em poucas frases — divide a sala sem ser gratuita; parece algo que alguém diria de verdade.",
   pergunta:
-    "Formato: uma única pergunta específica e pessoal — a pessoa quer responder e ver o que os outros responderam.",
+    "Formato: um mini-relato ou situação vivida que termina numa pergunta natural — a curiosidade nasce do que foi contado, não de um formulário.",
 };
+
+const PERGUNTA_RULES = `
+Modo pergunta — regras:
+- A pergunta deve nascer da história/situação (identificação ou curiosidade real).
+- PROIBIDO estruturas de formulário: "Você já…", "Qual foi a última vez…", "Alguém mais…?", "Quem mais…?".
+- Prefira perguntas que só façam sentido depois do que foi dito (ângulo, escolha, constrangimento, dúvida honesta).
+- Não comece o post com a pergunta; conte o suficiente para a pergunta fechar com peso.`;
 
 function buildSystem(mode: SingleContentMode): string {
   return `Você escreve um único post para o Threads.
 
 Objetivo: identificação. Quem lê deve pensar "isso sou eu" ou "conheço alguém assim".
 
-Antes de escrever, pense só: qual situação cotidiana faria milhares de pessoas se reconhecerem nisso?
-Você é livre para escolher o assunto, as pessoas e o ângulo. Não use listas fixas de temas.
+Antes de escrever, escolha uma situação cotidiana ESPECÍFICA e diferente das batidas (evite mercado, fila, trânsito, chuva genérica, "indo pro trabalho" genérico).
+Você é livre para escolher o assunto, as pessoas e o ângulo.
 Não force traição, ex, ou guerra dos sexos — use só se a situação real pedir.
 
 ${MODE_HINT[mode]}
+${mode === "pergunta" ? PERGUNTA_RULES : ""}
 
 Tom: natural, cotidiano, conversacional, plausível. Sem hashtag, sem emoji, sem filosofia vazia.
 Limite: no máximo ${THREADS_TEXT_MAX_CHARS} caracteres.
@@ -120,7 +128,11 @@ Responda APENAS com JSON: {"post":"..."}`;
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
   return `Escreva 1 ${mode} original e identificável.
 Contexto opcional de público (não force produto): ${audienceHint}
-Seja diferente a cada vez. Não recicle a mesma ideia.`;
+Seja diferente a cada vez. Não recicle a mesma ideia.${
+    mode === "pergunta"
+      ? "\nLembrete: sem 'Você já…' / 'Qual foi a última vez…'; a pergunta nasce do relato."
+      : ""
+  }`;
 }
 
 export interface ContentResult {

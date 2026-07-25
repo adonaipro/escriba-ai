@@ -34,7 +34,65 @@ import { isInsufficientQuotaError } from "./api-error";
 
 export type { StoryDebugData };
 
-const PROMPT_VERSION = "story-v2.1-human-first";
+const PROMPT_VERSION = "story-v2.2-product-in-life";
+
+/** Everyday seed situations — pick one by seed. Avoid cliché hubs (mercado, trânsito, chuva, fila). */
+const SITUATION_BANK: string[] = [
+  "mensagem no grupo da família que muda o clima da conversa",
+  "vizinho no elevador que comenta algo demais",
+  "amigo que marca de se ver e chega com outra pessoa sem avisar",
+  "ligação de um parente em horário estranho",
+  "achado de uma foto antiga no celular",
+  "comentário no espelho do elevador do prédio",
+  "presente inesperado deixado na porta",
+  "reunião online em que alguém entra sem querer com a câmera aberta",
+  "troca de roupa às pressas antes de sair",
+  "espera na sala de espera de consultório",
+  "conversa no sofá depois que as crianças dormem",
+  "barulho no apartamento de cima em horário absurdo",
+  "mensagem vista e não respondida por dias",
+  "encomenda que chega no nome de outra pessoa",
+  "convite de última hora para um compromisso social",
+  "achado de roupa que não é sua na lavanderia",
+  "silêncio estranho no jantar com a família",
+  "amigo pedindo dinheiro 'só desta vez'",
+  "descoberta de um hábito secreto de alguém da casa",
+  "mudança de móvel que ninguém combinou",
+  "visita que se estende além do confortável",
+  "comentário de um colega sobre sua aparência",
+  "plano cancelado por mensagem seca",
+  "arquivo antigo no computador que reabre um assunto",
+  "criança repetindo em voz alta algo que ouviu em casa",
+  "reviravolta num grupo de WhatsApp do condomínio",
+  "pessoa que sempre atrasa e hoje chegou cedo",
+  "roupa emprestada que volta diferente",
+  "bilhete deixado na geladeira",
+  "alguém usando seu carregador sem pedir",
+  "foto em que você aparece e não sabia que tiraram",
+  "pedido de desculpas que chega tarde demais",
+  "conversa com o porteiro que revela boato do prédio",
+  "plano de viagem cancelado por um dos dois",
+  "objeto que some de casa e reaparece em lugar estranho",
+  "comentário de uma sogra sobre como você 'costuma ser'",
+  "amigo que conta um segredo e pede para não espalhar",
+  "notificação de rede social de alguém que você evitaria",
+  "mudança de horário de sono de quem mora junto",
+  "presente de aniversário que veio com cartão genérico",
+  "pessoa que pergunta 'tudo bem?' e não espera a resposta",
+  "arrumação de uma gaveta que reabre uma memória",
+  "barulho de discussão nos vizinhos que entra pela janela",
+  "mensagem de voz longa demais para ouvir na hora",
+  "troca de senha da TV/streaming sem avisar",
+  "alguém sentado no 'seu' lugar de sempre",
+  "lembrete de consulta médica que você tinha esquecido",
+  "roupa que não fecha mais e ninguém comenta",
+  "pedido para 'só segurar um minuto' que vira uma hora",
+  "silêncio no carro depois de uma frase mal colocada",
+  "achado de um ingresso/recibo antigo no fundo da bolsa ou casaco",
+  "pessoa que te chama pelo nome do meio só quando está brava",
+  "plano de almoço que vira cobrança emocional",
+  "amigo que some do grupo e volta como se nada tivesse acontecido",
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -325,28 +383,28 @@ Objetivo único: identificação.
 No final da leitura, a pessoa deve pensar: "isso aconteceu comigo", "conheço alguém assim", "já passei por isso".
 
 Ordem mental obrigatória (não inverta):
-1) Primeiro: invente uma situação humana cotidiana que gere identificação em milhares de pessoas.
-   A história é sobre essa situação — pessoas, tensão, escolha, constrangimento, alívio, rotina, relação.
-2) Só depois: veja se e como um item da vida real (informado no user) pode aparecer dentro dessa situação já inventada.
-   O item é um elemento secundário da narrativa, nunca o tema central, nunca o motivo da história.
+1) Escolha e desenvolva UMA situação humana cotidiana (o user já aponta um ponto de partida — use-o ou desdobre algo igualmente específico e diferente).
+   A história é sobre pessoas, tensão, escolha, constrangimento, alívio, rotina, relação.
+2) Dentro dessa situação já viva, o item da vida real (se houver) participa da experiência do personagem:
+   a personagem usa, manuseia, se apoia nele, ou o momento muda um pouco porque o item está ali.
+   O item NÃO é o tema, NÃO é propaganda, e NÃO é só uma citação decorativa.
 
-Proibido:
-- partir do produto para inventar a história
-- fazer a trama ser "sobre o produto", "descobrir o produto" ou "mudar de vida por causa do produto"
-- usar o produto como conflito, gancho ou lição principal
-- copiar fórmulas de inserção (não invente receitas do tipo "alguém trouxe / ganhou / comprou / deixou o produto")
+Produto na história (quando houver item):
+- bom: o item entra no gesto, no deslocamento, no preparo, na espera, no encontro — altera ou facilita um instante da cena
+- ruim: "peguei minha bolsa" / "olhei o produto" / menção solta sem função na cena
+- proibido: descobrir o produto, mudar de vida por causa dele, lição de compra, review disfarçado
+
+Diversidade (obrigatório):
+- NÃO recicle o mesmo ambiente/contexto da história anterior
+- EVITE cenários batidos e genéricos: mercado, supermercado, fila, trânsito, chuva na rua, "indo pro trabalho" genérico — a menos que o ponto de partida peça explicitamente outra coisa e ainda assim torne único
+- prefira ângulos específicos e concretos (um detalhe que só aquela cena teria)
 
 Como escrever:
 - natural, cotidiana, espontânea, conversacional, plausível
 - pequenos detalhes concretos da vida real
 - emoção sem exagero
 - sem dramatização forçada, sem plot twist artificial, sem frases de IA
-- sem acontecer o improvável só para impressionar
-
-Liberdade:
-- você escolhe o conflito, os personagens, o cenário, o ritmo e o fechamento
-- cada história pode ser totalmente diferente da anterior
-- não recicle a mesma ideia com outras palavras
+- se a thread terminar em pergunta: a pergunta nasce do que foi vivido (curiosidade/identificação), nunca formulário do tipo "Você já…?" ou "Qual foi a última vez…?"
 
 Formato técnico (obrigatório):
 - escreva 5 a 6 posts em sequência (uma thread)
@@ -355,28 +413,43 @@ Formato técnico (obrigatório):
 {"posts":[{"position":1,"content":"..."},{"position":2,"content":"..."}]}`;
 }
 
+function pickSituationSeed(seed: number): string {
+  const idx = Math.abs(seed) % SITUATION_BANK.length;
+  return SITUATION_BANK[idx]!;
+}
+
 function buildUserPrompt(opts: {
   productContext: string;
   productUrl: string;
   withLink: boolean;
   sex: string;
   customTheme?: string;
+  seed: number;
+  avoidContexts?: string[];
 }): string {
   const sexBlock = sexPromptLine(opts.sex);
+  const situation = pickSituationSeed(opts.seed);
 
   const productBlock = opts.withLink
-    ? `Item que deve aparecer em algum momento da thread (elemento da cena, NÃO o tema):
+    ? `Item que participa da experiência (não é o tema da história):
 ${opts.productContext}
 
 Regras do item:
-- invente a situação humana PRIMEIRO; só então encaixe este item se couber de forma natural
-- o item não define o conflito, o título mental nem o desfecho moral
-- o leitor não pode sentir propaganda nem quebra para vender
-- use o marcador [LINK] exatamente com esses 6 caracteres no lugar da URL (não invente domínio)
-- não descreva o item como herói da história; no máximo um detalhe do ambiente/cena
-- se precisar nomear, use o nome factual; não invente benefícios milagrosos`
+1) Invente a situação humana primeiro.
+2) O item entra naturalmente na vivência do personagem: uso, gesto, preparo, deslocamento, espera, encontro.
+3) A presença do item deve alterar ou facilitar algum momento da cena (mesmo que de leve) — não basta citar.
+4) Proibido: propaganda, review, "comprei e mudou minha vida", menção solta sem função ("peguei X").
+5) Use o marcador [LINK] exatamente com esses 6 caracteres no lugar da URL (não invente domínio).
+6) Se nomear, use o nome factual; sem benefícios milagrosos.`
     : `Nesta história não use link de produto nem menção comercial.
 Foque só no relato humano identificável.`;
+
+  const avoidBlock =
+    opts.avoidContexts && opts.avoidContexts.length > 0
+      ? `\nPENALIZAÇÃO FORTE — NÃO repita estes contextos/ambientes já usados nesta geração (mude cenário, relação e ângulo por completo):\n${opts.avoidContexts
+          .map((c, i) => `${i + 1}. ${c}`)
+          .join("\n")}`
+      : "";
 
   const freeNote = opts.customTheme?.trim()
     ? `\nPedido livre do usuário (opcional; não substitui a situação humana): ${opts.customTheme.trim()}`
@@ -384,10 +457,14 @@ Foque só no relato humano identificável.`;
 
   return `${sexBlock}
 
+Ponto de partida (obrigatório usar como base ou desdobrar em algo igualmente específico; não troque por mercado/trânsito/fila genéricos):
+→ ${situation}
+${avoidBlock}
+
 ${productBlock}
 ${freeNote}
 
-Gere a thread: situação humana primeiro; item só como detalhe secundário.`;
+Gere a thread: situação humana viva; item como participante natural da experiência (quando houver), nunca citação artificial.`;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -404,6 +481,7 @@ export async function runStoryEngine(
   /** @deprecated V2 ignores forced incidents — kept for call-site compatibility */
   _incidentSeed?: string,
   customTheme?: string,
+  avoidContexts?: string[],
 ): Promise<StoryResult> {
   const start = Date.now();
   const model = config.model ?? resolveDefaultModel(config);
@@ -418,6 +496,8 @@ export async function runStoryEngine(
     withLink,
     sex: narrator.sex,
     customTheme,
+    seed,
+    avoidContexts,
   });
 
   const text = await callLLM(system, user, config, 1800, ctx, "geração", 0, seed);

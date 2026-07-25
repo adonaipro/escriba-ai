@@ -155,9 +155,12 @@ export async function POST(request: NextRequest) {
       socialAccountId: accountId,
     });
 
-    const resolvedScheduleTimes = data.approvalMode === "auto"
-      ? completeTimes(data.scheduleTimes ?? [], data.trendsPerDay)
-      : data.scheduleTimes ?? [];
+    // Always materialize enough daily slots so generation can place calendar entries
+    // (manual review still creates paused publications; auto creates scheduled ones).
+    const resolvedScheduleTimes = completeTimes(
+      data.scheduleTimes ?? [],
+      data.trendsPerDay,
+    );
     const customSchedule = JSON.stringify({
       contentMode: data.contentMode,
       editorialModes: data.contentMode === "mix-editorial" ? data.editorialModes : [data.contentMode],

@@ -276,6 +276,19 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       hasChildren: false,
       livesAlone: false,
     };
+    // Penalize repeating the same scene context across consecutive stories in this campaign.
+    const recentTrends = await prisma.trend.findMany({
+      where: { campaignId: campaign.id },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: { hook: true, narrativeSummary: true, setting: true },
+    });
+    const avoidContexts = recentTrends
+      .map((t) => [t.setting, t.hook, t.narrativeSummary].filter(Boolean).join(" — "))
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .slice(0, 6);
+
     const generated = llmConfig
       ? await buildNarrativeLLM(
           productName, productUrl, Date.now() + trendCount * 137,
@@ -283,6 +296,8 @@ export async function processGenerationJob(jobId: string): Promise<void> {
           undefined, undefined, llmConfig,
           sexOnly,
           undefined, contentMode as ContentMode | undefined,
+          undefined,
+          avoidContexts,
         )
       : await provider.generateNarrative(input);
     const output: NarrativeOutput = "format" in generated ? generated : {
@@ -368,19 +383,39 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       });
     }
 
-    if (campaign.approvalMode === "auto") {
+    // Always create calendar slots after generation when a schedule exists.
+    // approvalMode only gates auto-publish (paused vs scheduled), not calendar visibility.
+    {
       let slot = job.targetSlot;
       if (!slot) {
         const latest = await prisma.trend.findFirst({
           where: { campaignId: campaign.id, scheduledAt: { not: null } },
-          orderBy: { scheduledAt: "desc" }, select: { scheduledAt: true },
+          orderBy: { scheduledAt: "desc" },
+          select: { scheduledAt: true },
         });
         const now = new Date();
-        const campaignStart = campaign.startDate && campaign.startDate > now ? campaign.startDate : now;
-        const after = latest?.scheduledAt && latest.scheduledAt > campaignStart ? latest.scheduledAt : campaignStart;
+        const campaignStart =
+          campaign.startDate && campaign.startDate > now ? campaign.startDate : now;
+        const after =
+          latest?.scheduledAt && latest.scheduledAt > campaignStart
+            ? latest.scheduledAt
+            : campaignStart;
         slot = nextCampaignSlot(campaign.customSchedule, after);
       }
-      if (slot) await scheduleTrend(trend.id, slot);
+      if (slot) {
+        await scheduleTrend(trend.id, slot);
+        // Manual review: keep on calendar with scheduledAt, but do not auto-publish.
+        if (campaign.approvalMode !== "auto") {
+          await prisma.publication.updateMany({
+            where: { trendId: trend.id, status: "scheduled" },
+            data: { status: "paused" },
+          });
+          await prisma.trend.update({
+            where: { id: trend.id },
+            data: { status: "paused" },
+          });
+        }
+      }
     }
 
     await updateJob(jobId, {
