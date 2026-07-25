@@ -4,10 +4,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getSelectedAccountId } from "@/lib/account";
+import {
+  classifyContentType,
+  detectTheme,
+  modelLabel,
+  narratorLabel,
+  renderDailyExport,
+  type ExportStory,
+} from "@/lib/calendar/daily-export";
 
 /**
  * GET /api/calendar/export?date=YYYY-MM-DD&scope=selected|all
  * Downloads a .txt of all stories scheduled that day for the current user's profile.
+ * Includes managerial summary (local analysis, no LLM).
  */
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -55,7 +64,7 @@ export async function GET(request: NextRequest) {
   const publications = await prisma.publication.findMany({
     where: {
       campaign: {
-        profileId, // never leak other users
+        profileId,
         ...accountFilter,
       },
       trendId: { not: null },
@@ -66,18 +75,29 @@ export async function GET(request: NextRequest) {
         select: {
           id: true,
           name: true,
+          aiModel: true,
           socialAccount: {
             select: { username: true, displayName: true },
           },
-          narrator: { select: { name: true } },
+          narrator: { select: { id: true, name: true } },
         },
       },
       trend: {
         select: {
           id: true,
           hook: true,
+          narrativeSummary: true,
           status: true,
+          format: true,
+          contentMode: true,
+          conflictType: true,
+          openingStyle: true,
+          questionType: true,
+          tone: true,
+          structureType: true,
           scheduledAt: true,
+          narratorId: true,
+          narrator: { select: { name: true } },
           posts: {
             orderBy: { position: "asc" },
             select: { position: true, content: true },
@@ -90,13 +110,19 @@ export async function GET(request: NextRequest) {
 
   // One block per story/trend (not per reply Publication)
   const seen = new Set<string>();
-  const stories: Array<{
+  const trendIds: string[] = [];
+  const campaignIds = new Set<string>();
+  const draftStories: Array<{
+    trendId: string;
+    campaignId: string;
     username: string;
     campaign: string;
-    narrator: string;
+    campaignAiModel: string;
+    campaignNarratorName: string | null;
+    trendNarratorName: string | null;
     when: Date;
     status: string;
-    title: string;
+    trend: NonNullable<(typeof publications)[number]["trend"]>;
     posts: Array<{ position: number; content: string }>;
   }> = [];
 
@@ -106,7 +132,9 @@ export async function GET(request: NextRequest) {
     seen.add(trendId);
 
     const trend = pub.trend;
-    let orderedPosts = trend?.posts ?? [];
+    if (!trend) continue;
+
+    let orderedPosts = trend.posts ?? [];
     if (!orderedPosts.length) {
       orderedPosts = await prisma.trendPost.findMany({
         where: { trendId },
@@ -115,75 +143,131 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const username =
-      pub.campaign.socialAccount?.username
-        ? `@${pub.campaign.socialAccount.username}`
-        : pub.campaign.socialAccount?.displayName ?? "(sem conta)";
+    const username = pub.campaign.socialAccount?.username
+      ? `@${pub.campaign.socialAccount.username}`
+      : pub.campaign.socialAccount?.displayName ?? "(sem conta)";
 
-    const firstContent = orderedPosts[0]?.content ?? trend?.hook ?? "";
-    const title =
-      (trend?.hook && trend.hook.trim()) ||
-      firstContent.split("\n")[0]?.slice(0, 120) ||
-      "(sem título)";
+    // Prefer trend-level status when published; otherwise publication status of the lead slot
+    const status = trend.status === "published" ? "published" : pub.status;
 
-    stories.push({
+    draftStories.push({
+      trendId,
+      campaignId: pub.campaign.id,
       username,
       campaign: pub.campaign.name,
-      narrator: pub.campaign.narrator?.name ?? "(sem narrador)",
+      campaignAiModel: pub.campaign.aiModel,
+      campaignNarratorName: pub.campaign.narrator?.name ?? null,
+      trendNarratorName: trend.narrator?.name ?? null,
       when: pub.scheduledAt,
-      status: pub.status,
-      title,
+      status,
+      trend,
       posts: orderedPosts,
     });
+    trendIds.push(trendId);
+    campaignIds.add(pub.campaign.id);
   }
 
-  const fmtWhen = (d: Date) =>
-    new Intl.DateTimeFormat("pt-BR", {
-      timeZone: "America/Sao_Paulo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
+  // Load generation metadata (character, family, emotion, provider) — already persisted
+  const events =
+    trendIds.length === 0
+      ? []
+      : await prisma.campaignEvent.findMany({
+          where: {
+            campaignId: { in: [...campaignIds] },
+            type: "generated",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 500,
+          select: { metadata: true, campaignId: true },
+        });
 
-  const lines: string[] = [
-    `Escriba — Exportação diária`,
-    `Data: ${date}`,
-    `Escopo: ${scopeLabel}`,
-    `Histórias: ${stories.length}`,
-    `Gerado em: ${fmtWhen(new Date())}`,
-    "",
-  ];
+  type GenMeta = {
+    trendId?: string;
+    provider?: string;
+    family?: string;
+    emotion?: string;
+    character?: string;
+    role?: string;
+    conflictObject?: string;
+    contentMode?: string;
+  };
 
-  if (stories.length === 0) {
-    lines.push("(Nenhuma publicação neste dia para o escopo selecionado.)");
-  }
-
-  for (let i = 0; i < stories.length; i++) {
-    const s = stories[i]!;
-    lines.push("════════════════════════════════════════════════════════════");
-    lines.push(`#${i + 1}`);
-    lines.push(`Conta:     ${s.username}`);
-    lines.push(`Campanha:  ${s.campaign}`);
-    lines.push(`Narrador:  ${s.narrator}`);
-    lines.push(`Data/hora: ${fmtWhen(s.when)}`);
-    lines.push(`Status:    ${s.status}`);
-    lines.push(`Título:    ${s.title}`);
-    lines.push("");
-    if (s.posts.length === 0) {
-      lines.push("(sem posts)");
-    } else {
-      for (const post of s.posts) {
-        lines.push(`--- Post ${post.position} ---`);
-        lines.push(post.content);
-        lines.push("");
+  const metaByTrend = new Map<string, GenMeta>();
+  for (const ev of events) {
+    if (!ev.metadata) continue;
+    try {
+      const m = JSON.parse(ev.metadata) as GenMeta;
+      if (m.trendId && !metaByTrend.has(m.trendId)) {
+        metaByTrend.set(m.trendId, m);
       }
+    } catch {
+      /* ignore malformed legacy metadata */
     }
-    lines.push("");
   }
 
-  const body = lines.join("\n");
+  const stories: ExportStory[] = draftStories.map((d) => {
+    const gen = metaByTrend.get(d.trendId) ?? {};
+    const firstContent = d.posts[0]?.content ?? d.trend.hook ?? "";
+    const narratorSource = d.trendNarratorName ?? d.campaignNarratorName;
+    const { label: narrator, missing: narratorMissing } = narratorLabel(narratorSource);
+    const contentMode = d.trend.contentMode ?? gen.contentMode ?? null;
+    const classified = classifyContentType({
+      contentMode,
+      format: d.trend.format,
+      questionType: d.trend.questionType,
+      hook: d.trend.hook,
+      firstPost: firstContent,
+    });
+    const theme = detectTheme({
+      conflictType: d.trend.conflictType,
+      family: gen.family,
+      emotion: gen.emotion,
+      contentMode,
+      narrativeSummary: d.trend.narrativeSummary,
+      hook: d.trend.hook,
+    });
+    const premise =
+      (d.trend.narrativeSummary && d.trend.narrativeSummary.trim()) ||
+      (d.trend.hook && d.trend.hook.trim()) ||
+      firstContent.split("\n")[0]?.slice(0, 160) ||
+      "";
+    const fullText = d.posts.map((p) => p.content).join("\n");
+    const character = (gen.character || gen.role || "").trim();
+    const conflict =
+      (d.trend.conflictType?.trim() || gen.conflictObject?.trim() || "").trim();
+    const opening =
+      (d.trend.openingStyle?.trim() ||
+        (d.trend.hook || firstContent).replace(/\s+/g, " ").trim().slice(0, 120) ||
+        "").trim();
+
+    return {
+      id: d.trendId,
+      username: d.username,
+      campaign: d.campaign,
+      campaignId: d.campaignId,
+      narrator,
+      narratorMissing,
+      model: modelLabel(d.campaignAiModel, gen.provider),
+      contentType: classified.type,
+      contentTypeLabel: classified.label,
+      theme,
+      premise,
+      status: d.status,
+      when: d.when,
+      hook: (d.trend.hook || firstContent).replace(/\s+/g, " ").trim(),
+      conflict,
+      opening,
+      character,
+      posts: d.posts,
+      fullText,
+    };
+  });
+
+  const body = renderDailyExport(
+    { date, scopeLabel, generatedAt: new Date() },
+    stories,
+  );
+
   const filename =
     scope === "all"
       ? `escriba-${date}-todas-contas.txt`
