@@ -6,6 +6,7 @@ import {
   assertNarratorSexMatchesText,
   type NarratorIdentity,
 } from "./narrators/identity-guard";
+import { resolveAndLinkCampaignNarrator } from "./narrators/resolve-campaign-narrator";
 import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
 import { buildNarrativeLLM } from "./llm/narrative-engine";
 import type { ContentMode } from "./llm/pipeline-types";
@@ -176,13 +177,10 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 30,
     });
 
-    // ─── Narrator: ALWAYS from Campaign — never UI / active account / other narrator ──
-    const narrator = campaign.narrator;
-    if (!campaign.narratorId || !narrator) {
-      throw new Error(
-        "Campanha sem narrador vinculado. Vincule um narrador à campanha antes de gerar conteúdo.",
-      );
-    }
+    // Auto-link narrator for legacy campaigns without narratorId
+    const narrator = await resolveAndLinkCampaignNarrator(campaign.id, profileId, {
+      socialAccountId: campaign.socialAccountId,
+    });
 
     const narratorIdentity: NarratorIdentity = {
       name: narrator.name,
@@ -204,8 +202,8 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     };
 
     const niche = campaign.profile?.niche ?? "";
-    const nicheHypotheses = narrator.hypotheses.filter((h) => h.niche === niche);
-    const allHypotheses = nicheHypotheses.length > 0 ? nicheHypotheses : narrator.hypotheses;
+    const nicheHypotheses = (narrator.hypotheses ?? []).filter((h) => h.niche === niche);
+    const allHypotheses = nicheHypotheses.length > 0 ? nicheHypotheses : (narrator.hypotheses ?? []);
     const activeHypotheses = DIMENSIONS.map((dim) => ({
       dimension: dim,
       value: selectHypothesisValue(allHypotheses, dim),

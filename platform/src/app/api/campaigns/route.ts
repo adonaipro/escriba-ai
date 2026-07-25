@@ -7,6 +7,7 @@ import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
 import { ensureCampaignDailyJobs } from "@/lib/scheduling/recurrence";
 import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
+import { resolveAndLinkCampaignNarrator } from "@/lib/narrators/resolve-campaign-narrator";
 
 const EDITORIAL_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
 const CONTENT_MODES = [...EDITORIAL_MODES, "mix-editorial"] as const;
@@ -181,6 +182,11 @@ export async function POST(request: NextRequest) {
         status: "testing",
         mode: "test",
       },
+    });
+
+    // Auto-link narrator (same-sex as account, sole active, or create defaults)
+    await resolveAndLinkCampaignNarrator(campaign.id, session.user.profile.id, {
+      socialAccountId: accountId,
     });
 
     await prisma.campaignEvent.create({
