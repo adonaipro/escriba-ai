@@ -2,6 +2,12 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ProdutosClient } from "./produtos-client";
+import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
+import {
+  getShopeeCommissionByItemId,
+  getShopeeMetricsSummary,
+  syncShopeeConversions,
+} from "@/lib/providers/shopee-conversions";
 
 export const metadata = { title: "Produtos" };
 
@@ -41,16 +47,46 @@ export default async function ProdutosPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  // Prefer official Shopee conversionReport for commission / conversions when available.
+  let shopeeByItem = new Map<string, { commission: number; qty: number; conversions: number }>();
+  let shopeeTotals: Awaited<ReturnType<typeof getShopeeMetricsSummary>> | null = null;
+  if (hasShopeeCredentials()) {
+    try {
+      shopeeTotals = await getShopeeMetricsSummary(profileId);
+      const staleMs = 6 * 60 * 60 * 1000;
+      const needsRefresh =
+        !shopeeTotals.lastSyncedAt ||
+        Date.now() - shopeeTotals.lastSyncedAt.getTime() > staleMs;
+      if (needsRefresh) {
+        await syncShopeeConversions(profileId, {
+          purchaseTimeStart: new Date(Date.now() - 90 * 86400000),
+          purchaseTimeEnd: new Date(),
+          maxPages: 4,
+        }).catch(() => null);
+        shopeeTotals = await getShopeeMetricsSummary(profileId);
+      }
+      const itemIds = products
+        .map((p) => p.externalId)
+        .filter((id): id is string => Boolean(id));
+      shopeeByItem = await getShopeeCommissionByItemId(profileId, itemIds);
+    } catch {
+      shopeeByItem = new Map();
+      shopeeTotals = null;
+    }
+  }
+
   const enriched = products.map((p) => {
-    let clicks = 0, impressions = 0, conversions = 0, revenue = 0;
+    let clicks = 0;
+    let impressions = 0;
     p.campaigns.forEach((c) => {
       c.trends.forEach((t) => {
         clicks += t.totalClicks;
         impressions += t.totalImpressions;
-        conversions += t.totalConversions;
-        revenue += t.totalRevenueBrl;
       });
     });
+    const shopee = p.externalId ? shopeeByItem.get(p.externalId) : undefined;
+    const conversions = shopee?.conversions ?? 0;
+    const revenue = shopee?.commission ?? 0;
     return {
       id: p.id,
       name: p.name,
@@ -72,10 +108,27 @@ export default async function ProdutosPage() {
         impressions,
         conversions,
         revenueBrl: revenue,
+        itemsSold: shopee?.qty ?? 0,
         ctr: impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0,
+        source: shopee ? ("shopee" as const) : ("none" as const),
       },
     };
   });
 
-  return <ProdutosClient products={enriched} />;
+  return (
+    <ProdutosClient
+      products={enriched}
+      shopeeSummary={
+        shopeeTotals
+          ? {
+              totalCommission: shopeeTotals.totalCommission,
+              conversions: shopeeTotals.conversions,
+              orders: shopeeTotals.orders,
+              itemsSold: shopeeTotals.itemsSold,
+              lastSyncedAt: shopeeTotals.lastSyncedAt?.toISOString() ?? null,
+            }
+          : null
+      }
+    />
+  );
 }

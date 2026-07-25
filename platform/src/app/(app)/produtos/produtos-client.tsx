@@ -13,8 +13,15 @@ import { Button } from "@/components/ui/button";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ProductMetrics {
-  campaigns: number; narratives: number; clicks: number;
-  impressions: number; conversions: number; revenueBrl: number; ctr: number;
+  campaigns: number;
+  narratives: number;
+  clicks: number;
+  impressions: number;
+  conversions: number;
+  revenueBrl: number;
+  itemsSold?: number;
+  ctr: number;
+  source?: "shopee" | "none";
 }
 
 interface ProductItem {
@@ -23,6 +30,14 @@ interface ProductItem {
   commission: number; commissionPct: number; rating: number | null;
   analysisStatus: string; lastSyncedAt: string | null; confidence: string | null;
   metrics: ProductMetrics;
+}
+
+interface ShopeeSummary {
+  totalCommission: number;
+  conversions: number;
+  orders: number;
+  itemsSold: number;
+  lastSyncedAt: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -406,12 +421,19 @@ function ProductCard({ product, selected, onToggle }: { product: ProductItem; se
 
 // ─── Main Client ──────────────────────────────────────────────────────────────
 
-export function ProdutosClient({ products }: { products: ProductItem[] }) {
+export function ProdutosClient({
+  products,
+  shopeeSummary = null,
+}: {
+  products: ProductItem[];
+  shopeeSummary?: ShopeeSummary | null;
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [deletingProducts, setDeletingProducts] = useState(false);
+  const [syncingShopee, setSyncingShopee] = useState(false);
 
   const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -419,8 +441,30 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
     p.marketplace.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalRevenue = products.reduce((s, p) => s + p.metrics.revenueBrl, 0);
-  const totalConversions = products.reduce((s, p) => s + p.metrics.conversions, 0);
+  // Prefer official Shopee conversionReport totals when available.
+  const totalRevenue = shopeeSummary?.totalCommission
+    ?? products.reduce((s, p) => s + p.metrics.revenueBrl, 0);
+  const totalConversions = shopeeSummary?.conversions
+    ?? products.reduce((s, p) => s + p.metrics.conversions, 0);
+
+  async function syncShopeeMetrics() {
+    setSyncingShopee(true);
+    try {
+      const response = await fetch("/api/shopee/conversions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 90, maxPages: 15 }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        window.alert(data.error || "Falha ao sincronizar conversões Shopee");
+      } else {
+        router.refresh();
+      }
+    } finally {
+      setSyncingShopee(false);
+    }
+  }
 
   function handleImported(id: string) {
     setShowImport(false);
@@ -454,26 +498,39 @@ export function ProdutosClient({ products }: { products: ProductItem[] }) {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" asChild><Link href="/produtos/oportunidades"><ShoppingBag className="h-4 w-4" /> Buscar na Shopee</Link></Button>
+              <Button variant="outline" disabled={syncingShopee} onClick={() => void syncShopeeMetrics()}>
+                {syncingShopee ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+                {syncingShopee ? "Sincronizando…" : "Sync Shopee"}
+              </Button>
               <Button onClick={() => setShowImport(true)} className="gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"><Plus className="h-4 w-4" /> Importar produto</Button>
             </div>
           </div>
 
-          {products.length > 0 && (
-            <div className="grid grid-cols-4 gap-4 mb-8">
-              {[
-                { label: "Produtos", value: products.length, icon: Package },
-                { label: "Campanhas", value: products.reduce((s, p) => s + p.metrics.campaigns, 0), icon: Megaphone },
-                { label: "Conversões", value: totalConversions, icon: BarChart3 },
-                { label: "Comissão acumulada", value: `R$ ${totalRevenue.toFixed(2)}`, icon: BarChart3 },
-              ].map(({ label, value, icon: Icon }) => (
-                <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon className="h-4 w-4 text-pink-400" />
-                    <span className="text-xs text-zinc-500">{label}</span>
+          {(products.length > 0 || shopeeSummary) && (
+            <div className="space-y-2 mb-8">
+              {shopeeSummary?.lastSyncedAt && (
+                <p className="text-[11px] text-zinc-600">
+                  Métricas Shopee (conversionReport) · última sync{" "}
+                  {new Date(shopeeSummary.lastSyncedAt).toLocaleString("pt-BR")}
+                  {shopeeSummary.orders != null ? ` · ${shopeeSummary.orders} pedidos · ${shopeeSummary.itemsSold} itens` : ""}
+                </p>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Produtos", value: products.length, icon: Package },
+                  { label: "Campanhas", value: products.reduce((s, p) => s + p.metrics.campaigns, 0), icon: Megaphone },
+                  { label: "Conversões", value: totalConversions, icon: BarChart3 },
+                  { label: "Comissão acumulada", value: `R$ ${Number(totalRevenue).toFixed(2)}`, icon: BarChart3 },
+                ].map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="h-4 w-4 text-pink-400" />
+                      <span className="text-xs text-zinc-500">{label}</span>
+                    </div>
+                    <p className="text-xl font-semibold text-zinc-100">{value}</p>
                   </div>
-                  <p className="text-xl font-semibold text-zinc-100">{value}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 

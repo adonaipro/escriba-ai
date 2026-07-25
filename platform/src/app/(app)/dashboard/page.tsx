@@ -2,7 +2,6 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   TrendingUp,
-  MousePointerClick,
   Eye,
   DollarSign,
   ArrowUpRight,
@@ -28,8 +27,11 @@ import { format, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getSelectedAccountId } from "@/lib/account";
 import { resolveDateRange } from "@/lib/analytics/date-range";
+import { buildDailyPerformance } from "@/lib/analytics/daily-performance";
 import { DateRangeFilter } from "@/components/analytics/date-range-filter";
 import { PerformanceChart } from "@/components/analytics/performance-chart";
+import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
+import { getShopeeMetricsSummary, syncShopeeConversions } from "@/lib/providers/shopee-conversions";
 
 function statusColor(status: string) {
   const colors: Record<string, string> = {
@@ -146,26 +148,21 @@ async function getDashboardData(profileId: string, accountId: string | null, ran
     }),
   ]);
 
-  const totalRevenue = publications.reduce((s, p) => s + (p.revenueBrl || 0), 0);
+  // Threads-side metrics (impressions/engagement from Meta insights).
+  // Affiliate revenue/conversions come from Shopee conversionReport — not from publications.
   const totalClicks = publications.reduce((s, p) => s + (p.clicks || 0), 0);
   const totalImpressions = publications.reduce((s, p) => s + (p.impressions || 0), 0);
-  const totalConversions = publications.reduce((s, p) => s + (p.conversions || 0), 0);
   const totalEngagements = publications.reduce((s, p) => s + (p.likes || 0) + (p.replies || 0) + (p.reposts || 0) + (p.quotes || 0) + (p.shares || 0), 0);
   const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
   const publishedPosts = publications.length;
   const publishedCampaigns = campaigns.filter((campaign) => campaign.publications.length > 0).length;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   const latestMetricsSync = publications.reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
-  const dailyMap = new Map<string, { views: number; posts: number }>();
-  for (const publication of publications) {
-    if (!publication.publishedAt) continue;
-    const key = format(publication.publishedAt, "dd/MM");
-    const current = dailyMap.get(key) ?? { views: 0, posts: 0 };
-    current.views += publication.impressions ?? 0;
-    current.posts += 1;
-    dailyMap.set(key, current);
-  }
-  const dailyPerformance = [...dailyMap.entries()].map(([label, value]) => ({ label, ...value }));
+  const dailyPerformance = buildDailyPerformance(publications, {
+    from: range.from,
+    to: range.to,
+    fillGaps: Boolean(range.from),
+  });
 
   // Computed intelligence signals
   const scaleEligible = campaigns.filter((c) => c.status === "scale_eligible");
@@ -243,7 +240,7 @@ async function getDashboardData(profileId: string, accountId: string | null, ran
   }
 
   return {
-    metrics: { totalRevenue, totalClicks, totalImpressions, avgCtr, totalConversions, totalEngagements, engagementRate, publishedPosts, publishedCampaigns, latestMetricsSync },
+    metrics: { totalClicks, totalImpressions, avgCtr, totalEngagements, engagementRate, publishedPosts, publishedCampaigns, latestMetricsSync },
     campaigns,
     scaleEligible,
     saturating,
@@ -282,8 +279,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const accountId = await getSelectedAccountId(session.user.profile.id);
   const params = await searchParams;
   const range = resolveDateRange(params.period, params.from, params.to);
-  const data = await getDashboardData(session.user.profile.id, accountId, range);
+  const profileId = session.user.profile.id;
+  const data = await getDashboardData(profileId, accountId, range);
   const activeCampaigns = data.campaigns.filter((c) => !["paused", "ended"].includes(c.status));
+
+  // Shopee affiliate metrics (official conversionReport) — independent of Threads publications.
+  let shopeeMetrics: Awaited<ReturnType<typeof getShopeeMetricsSummary>> | null = null;
+  if (hasShopeeCredentials()) {
+    try {
+      shopeeMetrics = await getShopeeMetricsSummary(profileId, range.from, range.to);
+      const staleMs = 6 * 60 * 60 * 1000;
+      const needsRefresh =
+        !shopeeMetrics.lastSyncedAt ||
+        Date.now() - shopeeMetrics.lastSyncedAt.getTime() > staleMs;
+      if (needsRefresh) {
+        await syncShopeeConversions(profileId, {
+          purchaseTimeStart: range.from ?? new Date(Date.now() - 90 * 86400000),
+          purchaseTimeEnd: range.to,
+          maxPages: 4,
+        }).catch(() => null);
+        shopeeMetrics = await getShopeeMetricsSummary(profileId, range.from, range.to);
+      }
+    } catch {
+      shopeeMetrics = null;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -400,71 +420,137 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        {[
-          {
-            title: "Receita total",
-            value: formatCurrency(data.metrics.totalRevenue),
-            icon: DollarSign,
-            color: "text-emerald-400",
-            bg: "bg-emerald-600/10",
-            sub: data.metrics.totalConversions > 0 ? `${data.metrics.totalConversions} conversoes` : "sem conversoes ainda",
-          },
-          {
-            title: "Visualizações",
-            value: formatNumber(data.metrics.totalImpressions),
-            icon: Eye,
-            color: "text-blue-400",
-            bg: "bg-blue-600/10",
-            sub: data.metrics.totalClicks > 0 ? `${formatNumber(data.metrics.totalClicks)} cliques rastreados` : "cliques ainda não rastreados",
-          },
-          {
-            title: "Interações",
-            value: formatNumber(data.metrics.totalEngagements),
-            icon: Users,
-            color: "text-amber-400",
-            bg: "bg-amber-600/10",
-            sub: "curtidas, respostas e compartilhamentos",
-          },
-          {
-            title: "Engajamento",
-            value: formatPercent(data.metrics.engagementRate),
-            icon: TrendingUp,
-            color: "text-cyan-400",
-            bg: "bg-cyan-600/10",
-            sub: "interações por visualização",
-          },
-          {
-            title: "Posts publicados",
-            value: formatNumber(data.metrics.publishedPosts),
-            icon: CalendarDays,
-            color: "text-blue-400",
-            bg: "bg-blue-600/10",
-            sub: "blocos enviados ao Threads",
-          },
-          {
-            title: "Campanhas publicadas",
-            value: String(data.metrics.publishedCampaigns),
-            icon: Activity,
-            color: "text-pink-400",
-            bg: "bg-pink-600/10",
-            sub: `${activeCampaigns.length} ativas nesta conta`,
-          },
-        ].map((m) => (
-          <Card key={m.title}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-zinc-400">{m.title}</span>
-                <div className={`rounded-lg p-1.5 ${m.bg}`}>
-                  <m.icon className={`h-4 w-4 ${m.color}`} />
+      {/* Shopee affiliate KPIs — source: conversionReport (official affiliate panel) */}
+      {shopeeMetrics && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Shopee afiliados</p>
+            <span className="text-[11px] text-zinc-600">
+              Fonte: conversionReport · {shopeeMetrics.lastSyncedAt
+                ? `sincronizado ${format(shopeeMetrics.lastSyncedAt, "dd/MM/yyyy HH:mm")}`
+                : "ainda não sincronizado"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+            {[
+              {
+                title: "Comissão acumulada",
+                value: formatCurrency(shopeeMetrics.totalCommission),
+                icon: DollarSign,
+                color: "text-emerald-400",
+                bg: "bg-emerald-600/10",
+                sub: "totalCommission (painel Shopee)",
+              },
+              {
+                title: "Conversões",
+                value: formatNumber(shopeeMetrics.conversions),
+                icon: TrendingUp,
+                color: "text-pink-400",
+                bg: "bg-pink-600/10",
+                sub: "conversionIds únicos",
+              },
+              {
+                title: "Pedidos",
+                value: formatNumber(shopeeMetrics.orders),
+                icon: ListOrdered,
+                color: "text-amber-400",
+                bg: "bg-amber-600/10",
+                sub: `${shopeeMetrics.completedOrders} completed · ${shopeeMetrics.pendingOrders} pending`,
+              },
+              {
+                title: "Itens vendidos",
+                value: formatNumber(shopeeMetrics.itemsSold),
+                icon: Activity,
+                color: "text-cyan-400",
+                bg: "bg-cyan-600/10",
+                sub: "soma de qty nos itens",
+              },
+              {
+                title: "Receita (GMV)",
+                value: formatCurrency(shopeeMetrics.revenueGmv),
+                icon: DollarSign,
+                color: "text-blue-400",
+                bg: "bg-blue-600/10",
+                sub: "itemPrice × qty",
+              },
+            ].map((m) => (
+              <Card key={m.title}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-zinc-400">{m.title}</span>
+                    <div className={`rounded-lg p-1.5 ${m.bg}`}>
+                      <m.icon className={`h-4 w-4 ${m.color}`} />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
+                  <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Threads KPI cards */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Threads · conteúdo</p>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+          {[
+            {
+              title: "Visualizações",
+              value: formatNumber(data.metrics.totalImpressions),
+              icon: Eye,
+              color: "text-blue-400",
+              bg: "bg-blue-600/10",
+              sub: data.metrics.totalClicks > 0 ? `${formatNumber(data.metrics.totalClicks)} cliques rastreados` : "insights do Threads",
+            },
+            {
+              title: "Interações",
+              value: formatNumber(data.metrics.totalEngagements),
+              icon: Users,
+              color: "text-amber-400",
+              bg: "bg-amber-600/10",
+              sub: "curtidas, respostas e compartilhamentos",
+            },
+            {
+              title: "Engajamento",
+              value: formatPercent(data.metrics.engagementRate),
+              icon: TrendingUp,
+              color: "text-cyan-400",
+              bg: "bg-cyan-600/10",
+              sub: "interações por visualização",
+            },
+            {
+              title: "Posts publicados",
+              value: formatNumber(data.metrics.publishedPosts),
+              icon: CalendarDays,
+              color: "text-blue-400",
+              bg: "bg-blue-600/10",
+              sub: "blocos enviados ao Threads",
+            },
+            {
+              title: "Campanhas publicadas",
+              value: String(data.metrics.publishedCampaigns),
+              icon: Activity,
+              color: "text-pink-400",
+              bg: "bg-pink-600/10",
+              sub: `${activeCampaigns.length} ativas nesta conta`,
+            },
+          ].map((m) => (
+            <Card key={m.title}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-zinc-400">{m.title}</span>
+                  <div className={`rounded-lg p-1.5 ${m.bg}`}>
+                    <m.icon className={`h-4 w-4 ${m.color}`} />
+                  </div>
                 </div>
-              </div>
-              <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
-              <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
+                <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       <PerformanceChart data={data.dailyPerformance} />
@@ -493,7 +579,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               ) : (
                 <div className="divide-y divide-zinc-800">
                   {data.campaigns.slice(0, 6).map((c) => {
-                    const rev = c.publications.reduce((s, p) => s + (p.revenueBrl || 0), 0);
+                    const impressions = c.publications.reduce((s, p) => s + (p.impressions || 0), 0);
                     const clicks = c.publications.reduce((s, p) => s + (p.clicks || 0), 0);
                     return (
                       <Link
@@ -514,8 +600,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         </div>
                         <div className="flex items-center gap-4 shrink-0 ml-4">
                           <div className="text-right hidden sm:block">
-                            <p className="text-xs text-zinc-400">{formatNumber(clicks)} cliques</p>
-                            <p className="text-xs text-emerald-400">{formatCurrency(rev)}</p>
+                            <p className="text-xs text-zinc-400">{formatNumber(impressions)} views</p>
+                            <p className="text-xs text-zinc-500">{formatNumber(clicks)} cliques</p>
                           </div>
                           <Badge variant={statusColor(c.status)}>{campaignStatusLabel(c.status)}</Badge>
                         </div>

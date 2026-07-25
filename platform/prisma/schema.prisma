@@ -48,6 +48,7 @@ model Profile {
   recommendations     NarratorRecommendation[]
   products            Product[]
   shopeeOffers        ShopeeOffer[]
+  shopeeConversions   ShopeeConversion[]
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -519,6 +520,40 @@ model ShopeeOffer {
   @@index([profileId, sales])
   @@index([profileId, ratingStar])
   @@index([profileId, priceMin])
+}
+
+// SHOPEE CONVERSION — item-level rows from affiliate conversionReport.
+// Source of truth for commission / orders / items vs the official Shopee panel.
+model ShopeeConversion {
+  id                     String   @id @default(cuid())
+  profileId              String
+  conversionId           String
+  purchaseTime           DateTime
+  clickTime              DateTime?
+  totalCommission        Float    @default(0)
+  sellerCommission       Float    @default(0)
+  shopeeCommissionCapped Float    @default(0)
+  buyerType              String?
+  device                 String?
+  utmContent             String?
+  orderId                String   @default("")
+  orderStatus            String   @default("")
+  itemId                 String   @default("")
+  itemName               String   @default("")
+  shopName               String   @default("")
+  itemPrice              Float    @default(0)
+  qty                    Int      @default(0)
+  itemTotalCommission    Float    @default(0)
+  attributionType        String?
+  lastSyncedAt           DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  profile                Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, conversionId, orderId, itemId])
+  @@index([profileId, purchaseTime])
+  @@index([profileId, orderStatus])
+  @@index([profileId, itemId])
 }
 
 // ─────────────────────────────────────────────────────────────────

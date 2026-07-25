@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { resolveDateRange } from "@/lib/analytics/date-range";
+import { buildDailyPerformance } from "@/lib/analytics/daily-performance";
 import { DateRangeFilter } from "@/components/analytics/date-range-filter";
 import { format } from "date-fns";
 import { PerformanceChart } from "@/components/analytics/performance-chart";
@@ -121,16 +122,14 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
   const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   const latestMetricsSync = accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications)).reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
-  const dailyMap = new Map<string, { views: number; posts: number }>();
-  for (const publication of accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications))) {
-    if (publication.status !== "published" || !publication.publishedAt) continue;
-    const key = format(publication.publishedAt, "dd/MM");
-    const current = dailyMap.get(key) ?? { views: 0, posts: 0 };
-    current.views += publication.impressions ?? 0;
-    current.posts += 1;
-    dailyMap.set(key, current);
-  }
-  const dailyPerformance = [...dailyMap.entries()].map(([label, value]) => ({ label, ...value }));
+  const publishedForChart = accounts
+    .flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications))
+    .filter((publication) => publication.status === "published");
+  const dailyPerformance = buildDailyPerformance(publishedForChart, {
+    from: range.from,
+    to: range.to,
+    fillGaps: Boolean(range.from),
+  });
 
   const sorted = [...metrics].sort((a, b) => b.totalImpressions - a.totalImpressions || b.engagementRate - a.engagementRate);
   const bestAccount = sorted[0] ?? null;

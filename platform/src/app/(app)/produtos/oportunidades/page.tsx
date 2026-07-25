@@ -180,9 +180,11 @@ export default function OportunidadesShopeePage() {
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">Catálogo de ofertas da Shopee</h1>
-        <p className="text-sm text-zinc-400">Pesquise todo o catálogo sincronizado e importe somente os produtos que deseja usar.</p>
+        <p className="text-sm text-zinc-400">
+          Com palavra-chave, a busca consulta a API oficial da Shopee (productOfferV2). Sem busca, usa o catálogo local sincronizado.
+        </p>
         <p className="mt-1 text-xs text-zinc-500">
-          {catalogTotal} produtos sincronizados
+          {catalogTotal} produtos no cache local
           {lastSyncedAt ? ` · atualizado em ${new Date(lastSyncedAt).toLocaleString("pt-BR")}` : ""}
         </p>
       </div>
