@@ -185,9 +185,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Auto-link narrator (same-sex as account, sole active, or create defaults)
-    await resolveAndLinkCampaignNarrator(campaign.id, session.user.profile.id, {
-      socialAccountId: accountId,
-    });
+    const linkedNarrator = await resolveAndLinkCampaignNarrator(
+      campaign.id,
+      session.user.profile.id,
+      { socialAccountId: accountId },
+    );
 
     await prisma.campaignEvent.create({
       data: {
@@ -210,7 +212,14 @@ export async function POST(request: NextRequest) {
       for (const generationJob of jobs) await processGenerationJob(generationJob.id);
     })();
 
-    return NextResponse.json({ campaign, jobId: jobs[0]?.id, jobIds: jobs.map((generationJob) => generationJob.id) }, { status: 201 });
+    return NextResponse.json(
+      {
+        campaign: { ...campaign, narratorId: linkedNarrator.id },
+        jobId: jobs[0]?.id,
+        jobIds: jobs.map((generationJob) => generationJob.id),
+      },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
