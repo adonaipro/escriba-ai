@@ -2,19 +2,19 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { hasShopeeCredentials, shopeeRequest } from "@/lib/providers/shopee-client";
 
+// Shopee GraphQL types: purchase times are Int64; orderStatus is DisplayOrderStatus enum
+// (omit orderStatus filter to pull all statuses, matching the full affiliate panel).
 const CONVERSION_QUERY = `query ConversionReport(
-  $purchaseTimeStart: Int!,
-  $purchaseTimeEnd: Int!,
+  $purchaseTimeStart: Int64!,
+  $purchaseTimeEnd: Int64!,
   $limit: Int,
-  $scrollId: String,
-  $orderStatus: String
+  $scrollId: String
 ) {
   conversionReport(
     purchaseTimeStart: $purchaseTimeStart,
     purchaseTimeEnd: $purchaseTimeEnd,
     limit: $limit,
-    scrollId: $scrollId,
-    orderStatus: $orderStatus
+    scrollId: $scrollId
   ) {
     nodes {
       purchaseTime
@@ -100,8 +100,6 @@ export type SyncShopeeConversionsOptions = {
   purchaseTimeEnd: Date;
   /** Max scroll pages per call (rate-limit safe). Default 5. */
   maxPages?: number;
-  /** If set, only sync this orderStatus. If omitted, syncs without filter (all statuses). */
-  orderStatus?: string;
 };
 
 export async function syncShopeeConversions(
@@ -112,6 +110,7 @@ export async function syncShopeeConversions(
     throw new Error("Credenciais da Shopee não configuradas");
   }
 
+  // GraphQL Int64 scalars accept numeric values in JSON body.
   const purchaseTimeStart = Math.floor(options.purchaseTimeStart.getTime() / 1000);
   const purchaseTimeEnd = Math.floor(options.purchaseTimeEnd.getTime() / 1000);
   const maxPages = Math.max(1, Math.min(20, options.maxPages ?? 5));
@@ -130,7 +129,6 @@ export async function syncShopeeConversions(
       limit,
     };
     if (scrollId) variables.scrollId = scrollId;
-    if (options.orderStatus) variables.orderStatus = options.orderStatus;
 
     const data = await shopeeRequest<{ conversionReport: ConversionReportResponse }>(
       CONVERSION_QUERY,
