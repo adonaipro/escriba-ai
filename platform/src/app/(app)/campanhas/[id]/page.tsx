@@ -721,7 +721,6 @@ export default function CampaignDetailPage() {
           <TabsTrigger value="narrativas">Narrativas ({campaign.trends.length})</TabsTrigger>
           <TabsTrigger value="laboratorio">Laboratório</TabsTrigger>
           <TabsTrigger value="timeline">Timeline ({campaign.events.length})</TabsTrigger>
-          <TabsTrigger value="aprendizados">Aprendizados ({campaign.learnings.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="narrativas" className="mt-4">
@@ -771,28 +770,7 @@ export default function CampaignDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="aprendizados" className="mt-4 space-y-3">
-          {campaign.learnings.length === 0 ? (
-            <p className="text-center text-sm text-zinc-500 py-8">Nenhum aprendizado desta campanha ainda.</p>
-          ) : (
-            campaign.learnings.map((l) => (
-              <Card key={l.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">{l.type}</Badge>
-                    <Badge variant={l.impact === "positive" ? "success" : l.impact === "negative" ? "destructive" : "outline"} className="text-xs">
-                      {l.impact === "positive" ? "positivo" : l.impact === "negative" ? "negativo" : "neutro"}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-zinc-200 leading-relaxed">{l.summary}</p>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    {format(new Date(l.recordedAt), "dd/MM/yyyy", { locale: ptBR })}
-                  </p>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
+
 
       </Tabs>
 

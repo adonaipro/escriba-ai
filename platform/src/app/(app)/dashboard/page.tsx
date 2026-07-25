@@ -190,28 +190,12 @@ async function getDashboardData(profileId: string, accountId: string | null, ran
       linkLabel: "Ver campanha",
     });
   }
-  if (learnings.length > 0) {
-    signals.push({
-      type: "discovery",
-      message: `A Entidade registrou ${learnings.length} padrao${learnings.length > 1 ? "es" : ""} narrativo${learnings.length > 1 ? "s" : ""}. Novos aprendizados disponiveis.`,
-      link: "/aprendizados",
-      linkLabel: "Ver padroes",
-    });
-  }
   if (upcoming.length > 0) {
     signals.push({
       type: "info",
       message: `${upcoming.length} publicacao${upcoming.length > 1 ? "oes" : ""} agendada${upcoming.length > 1 ? "s" : ""} nas proximas 24h.`,
       link: "/fila",
       linkLabel: "Ver fila",
-    });
-  }
-  if (topPatterns.length > 0 && topPatterns[0].usageCount >= 3) {
-    signals.push({
-      type: "discovery",
-      message: `Biblioteca narrativa com ${topPatterns.length} elementos registrados. Elemento mais testado: "${topPatterns[0].value}" (${topPatterns[0].usageCount}×).`,
-      link: "/narrativas",
-      linkLabel: "Ver biblioteca",
     });
   }
   if (activeJobs.length > 0) {
@@ -663,47 +647,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         {/* Right sidebar */}
         <div className="space-y-4">
-          {/* Learnings */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-pink-400" />
-                  <CardTitle className="text-base">Padroes detectados</CardTitle>
-                </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/aprendizados">Ver todos</Link>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 pb-4">
-              {data.learnings.length === 0 ? (
-                <p className="text-sm text-zinc-500 text-center py-4">
-                  A Entidade ainda nao detectou padroes.
-                </p>
-              ) : (
-                data.learnings.map((l) => {
-                  const { Icon, color } = impactIcon(l.impact);
-                  return (
-                    <div key={l.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                      <div className="flex items-start gap-2">
-                        <Icon className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${color}`} />
-                        <p className="text-xs text-zinc-300 leading-relaxed line-clamp-3">
-                          {l.summary}
-                        </p>
-                      </div>
-                      {l.autoApplied && (
-                        <div className="flex items-center gap-1 mt-2">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                          <span className="text-xs text-emerald-400">Aplicado automaticamente</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
+
 
           {/* Narrator recommendations */}
           {data.recommendations.length > 0 && (
@@ -797,32 +741,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           )}
 
-          {/* Top narrative patterns */}
-          {data.topPatterns.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Elementos narrativos</CardTitle>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href="/narrativas">Biblioteca</Link>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 pb-4">
-                {data.topPatterns.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-400 flex-1 truncate">{p.value}</span>
-                    <span className="text-xs text-zinc-600 shrink-0 font-mono">{p.type}</span>
-                    <span className="text-xs text-zinc-500 shrink-0">{p.usageCount}×</span>
-                    {p.winCount > 0 && (
-                      <TrendingUp className="h-3 w-3 text-emerald-400 shrink-0" />
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
           {/* Quick links */}
           <Card>
             <CardHeader className="pb-3">
@@ -833,8 +751,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 { href: "/trends", icon: TrendingUp, label: "Ver todas as Trends" },
                 { href: "/calendario", icon: CalendarDays, label: "Calendario estrategico" },
                 { href: "/fila", icon: ListOrdered, label: "Fila operacional" },
-                { href: "/aprendizados", icon: Brain, label: "Padroes narrativos" },
-                { href: "/narrativas", icon: Activity, label: "Biblioteca narrativa" },
+                { href: "/laboratorio", icon: FlaskConical, label: "Laboratório" },
+                { href: "/narradores", icon: Users, label: "Narradores" },
               ].map((item) => (
                 <Link
                   key={item.href}

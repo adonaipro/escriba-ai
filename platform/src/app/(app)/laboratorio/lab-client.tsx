@@ -1038,7 +1038,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
         {narrators.length === 0 && <option value="">Nenhum narrador cadastrado</option>}
         {narrators.map((n) => (
           <option key={n.id} value={n.id}>
-            {n.name} · {n.ageRange} · {n.sex === "female" ? "F" : "M"}
+            {n.sex === "female" ? "Mulher" : "Homem"}
           </option>
         ))}
       </select>
@@ -1410,8 +1410,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         </div>
                         <span className="text-sm font-medium">{n.name}</span>
                         <span className="text-xs text-zinc-500">
-                          {n.ageRange} · {n.sex === "female" ? "F" : "M"} ·{" "}
-                          {n.hypotheses.filter((h) => h.status === "winner").length} hipóteses vencedoras
+                          {n.sex === "female" ? "Mulher" : "Homem"}
                         </span>
                       </button>
                     ))}
@@ -1542,10 +1541,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                       <div>
                         <h2 className="text-base font-semibold text-zinc-100">{selectedNarrator.name}</h2>
                         <p className="text-xs text-zinc-500 mt-0.5">
-                          {selectedNarrator.ageRange} ·{" "}
-                          {selectedNarrator.sex === "female" ? "Feminino" : "Masculino"} ·{" "}
-                          {selectedNarrator.maritalStatus} ·{" "}
-                          {selectedNarrator.hasChildren ? "com filhos" : "sem filhos"}
+                          {selectedNarrator.sex === "female" ? "Mulher" : "Homem"}
                         </p>
                       </div>
                       <span
@@ -1578,7 +1574,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         <p className="text-lg font-bold text-pink-400">
                           {selectedNarrator.hypotheses.filter((h) => h.status === "winner").length}
                         </p>
-                        <p className="text-[10px] text-zinc-500">hipóteses ganhas</p>
+                        <p className="text-[10px] text-zinc-500">histórias</p>
                       </div>
                     </div>
 
@@ -1657,7 +1653,7 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                     {selectedNarrator.insights.length === 0 && selectedNarrator.hypotheses.length === 0 && (
                       <p className="text-xs text-zinc-600 text-center py-4">
                         A Entidade ainda não observou padrões suficientes para {selectedNarrator.name}.
-                        Gere narrativas reais em campanhas para alimentar o aprendizado.
+                        Gere narrativas no Laboratório ou em campanhas.
                       </p>
                     )}
                   </div>

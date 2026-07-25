@@ -269,19 +269,21 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 55,
     });
 
-    // Always pass campaign narrator identity — never omit (avoids female default fallback)
+    // V2.1: only sex reaches the LLM prompt; other fields are ignored placeholders.
+    const sexOnly = {
+      name: narratorContext.sex === "male" ? "Narrador homem" : "Narradora mulher",
+      sex: narratorContext.sex,
+      ageRange: "26-35",
+      maritalStatus: "other",
+      hasChildren: false,
+      livesAlone: false,
+    };
     const generated = llmConfig
       ? await buildNarrativeLLM(
           productName, productUrl, Date.now() + trendCount * 137,
-          narratorContext, undefined, undefined, llmConfig,
-          {
-            name: narratorContext.name,
-            sex: narratorContext.sex,
-            ageRange: narratorContext.ageRange,
-            maritalStatus: narratorContext.maritalStatus,
-            hasChildren: narratorContext.hasChildren,
-            livesAlone: narratorContext.livesAlone,
-          },
+          sexOnly,
+          undefined, undefined, llmConfig,
+          sexOnly,
           undefined, contentMode as ContentMode | undefined,
         )
       : await provider.generateNarrative(input);

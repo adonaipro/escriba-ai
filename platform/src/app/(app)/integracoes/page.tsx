@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { DisconnectThreadsButton } from "./threads-actions";
 import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
-import { describeNarrator } from "@/lib/narrators/names";
+
 
 async function getAccounts(profileId: string) {
   const [socialAccounts, marketplaceAccounts, narrators] = await Promise.all([
@@ -23,10 +23,6 @@ async function getAccounts(profileId: string) {
                 id: true,
                 name: true,
                 sex: true,
-                ageRange: true,
-                maritalStatus: true,
-                hasChildren: true,
-                livesAlone: true,
               },
             },
           },
@@ -157,9 +153,11 @@ export default async function IntegracoesPage({ searchParams }: { searchParams: 
                                 {activeNarrator.name[0]}
                               </div>
                               <div className="min-w-0">
-                                <p className="text-xs font-medium text-zinc-200 truncate">{activeNarrator.name}</p>
+                                <p className="text-xs font-medium text-zinc-200 truncate">
+                                  {activeNarrator.sex === "male" ? "Homem" : "Mulher"}
+                                </p>
                                 <p className="text-[10px] text-zinc-600 truncate">
-                                  {describeNarrator(activeNarrator)}
+                                  Sexo do narrador (único atributo usado na geração)
                                 </p>
                               </div>
                             </div>

@@ -192,16 +192,17 @@ async function generateOneLLM(
 ): Promise<LabNarrative> {
   const s = seed ?? Date.now();
   const filter = buildFilter(narrator);
+  // V2.1: only sex is used by Story Engine; legacy fields are placeholders.
   const narratorData = {
-    name:          narrator.name,
+    name:          narrator.sex === "male" ? "Narrador homem" : "Narradora mulher",
     sex:           narrator.sex,
-    ageRange:      narrator.ageRange,
-    maritalStatus: narrator.maritalStatus,
-    hasChildren:   narrator.hasChildren,
-    livesAlone:    narrator.livesAlone,
+    ageRange:      "26-35",
+    maritalStatus: "other",
+    hasChildren:   false,
+    livesAlone:    false,
   };
   const built = await buildNarrativeLLM(
-    productName, productUrl, s, filter, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment, contentMode, customTheme,
+    productName, productUrl, s, { sex: narrator.sex, ageRange: "26-35", maritalStatus: "other", hasChildren: false, livesAlone: false }, strategy, storedAnalysis, llmConfig, narratorData, voiceExperiment, contentMode, customTheme,
   );
   return {
     ...built,

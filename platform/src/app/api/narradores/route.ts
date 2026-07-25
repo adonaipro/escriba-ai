@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { generateNarratorName } from "@/lib/narrators/names";
-import { generateInitialHypotheses } from "@/lib/narrators/hypothesis-engine";
 
 export const runtime = "nodejs";
 
-// ─────────────────────────────────────────────────────────────────
-// GET /api/narradores — list narrators for the current profile
-// ─────────────────────────────────────────────────────────────────
+function displayName(sex: string): string {
+  return sex === "male" ? "Narrador homem" : "Narradora mulher";
+}
 
 export async function GET() {
   const session = await getSession();
@@ -16,25 +14,29 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const profileId = session.user.profile.id;
-
   const narrators = await prisma.narrator.findMany({
-    where: { profileId },
-    include: {
-      hypotheses: true,
-      insights: { orderBy: { createdAt: "desc" }, take: 3 },
+    where: { profileId: session.user.profile.id },
+    select: {
+      id: true,
+      name: true,
+      sex: true,
+      status: true,
+      createdAt: true,
       _count: { select: { campaigns: true, trends: true } },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json({ narrators });
+  return NextResponse.json({
+    narrators: narrators.map((n) => ({
+      ...n,
+      label: n.sex === "male" ? "Homem" : "Mulher",
+      displayName: displayName(n.sex),
+    })),
+  });
 }
 
-// ─────────────────────────────────────────────────────────────────
-// POST /api/narradores — create narrator from quiz
-// ─────────────────────────────────────────────────────────────────
-
+/** Create or reuse a single active narrator per sex. */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.user.profile) {
@@ -42,71 +44,33 @@ export async function POST(req: NextRequest) {
   }
 
   const profileId = session.user.profile.id;
-  const niche = session.user.profile.niche;
-
-  const body = await req.json() as {
-    sex?: string;
-    ageRange?: string;
-    maritalStatus?: string;
-    hasChildren?: boolean;
-    livesAlone?: boolean;
-  };
-
-  const { sex, ageRange, maritalStatus, hasChildren = false, livesAlone = false } = body;
-
-  if (!sex || !ageRange || !maritalStatus) {
-    return NextResponse.json(
-      { error: "sex, ageRange e maritalStatus são obrigatórios" },
-      { status: 400 }
-    );
+  const body = (await req.json()) as { sex?: string };
+  const sex = body.sex === "male" || body.sex === "female" ? body.sex : null;
+  if (!sex) {
+    return NextResponse.json({ error: "Informe sex: male ou female" }, { status: 400 });
   }
 
-  // Get existing names to avoid duplicates
-  const existing = await prisma.narrator.findMany({
-    where: { profileId },
-    select: { name: true },
+  const existing = await prisma.narrator.findFirst({
+    where: { profileId, sex, status: "active" },
   });
-  const existingNames = existing.map((n) => n.name);
+  if (existing) {
+    return NextResponse.json({ narrator: existing, reused: true }, { status: 200 });
+  }
 
-  // Generate AI name based on identity
-  const name = generateNarratorName(sex, ageRange, existingNames);
-
-  // Create the narrator
+  const name = displayName(sex);
   const narrator = await prisma.narrator.create({
     data: {
       profileId,
       name,
       sex,
-      ageRange,
-      maritalStatus,
-      hasChildren,
-      livesAlone,
+      // Legacy required columns — ignored by UI and LLM
+      ageRange: "26-35",
+      maritalStatus: "other",
+      hasChildren: false,
+      livesAlone: false,
       status: "active",
     },
   });
 
-  // Auto-generate initial hypotheses for this narrator+niche
-  const hypothesisSpecs = generateInitialHypotheses(narrator.id, niche, {
-    sex,
-    ageRange,
-    maritalStatus,
-    hasChildren,
-    livesAlone,
-  });
-
-  if (hypothesisSpecs.length > 0) {
-    await prisma.narratorHypothesis.createMany({
-      data: hypothesisSpecs,
-    });
-  }
-
-  const narratorWithHypotheses = await prisma.narrator.findUnique({
-    where: { id: narrator.id },
-    include: {
-      hypotheses: true,
-      insights: true,
-    },
-  });
-
-  return NextResponse.json({ narrator: narratorWithHypotheses }, { status: 201 });
+  return NextResponse.json({ narrator, reused: false }, { status: 201 });
 }
