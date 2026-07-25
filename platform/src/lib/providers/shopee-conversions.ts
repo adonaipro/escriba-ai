@@ -2,20 +2,9 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { hasShopeeCredentials, shopeeRequest } from "@/lib/providers/shopee-client";
 
-// Shopee GraphQL types: purchase times are Int64; orderStatus is DisplayOrderStatus enum
-// (omit orderStatus filter to pull all statuses, matching the full affiliate panel).
-const CONVERSION_QUERY = `query ConversionReport(
-  $purchaseTimeStart: Int64!,
-  $purchaseTimeEnd: Int64!,
-  $limit: Int,
-  $scrollId: String
-) {
-  conversionReport(
-    purchaseTimeStart: $purchaseTimeStart,
-    purchaseTimeEnd: $purchaseTimeEnd,
-    limit: $limit,
-    scrollId: $scrollId
-  ) {
+// Shopee GraphQL: purchase times are Int64 (must be JSON strings).
+// Never declare scrollId unless we have a real value — null scrollId returns "got null for non-null".
+const CONVERSION_FIELDS = `
     nodes {
       purchaseTime
       clickTime
@@ -44,8 +33,32 @@ const CONVERSION_QUERY = `query ConversionReport(
       limit
       hasNextPage
       scrollId
-    }
-  }
+    }`;
+
+const CONVERSION_QUERY = `query ConversionReport(
+  $purchaseTimeStart: Int64!,
+  $purchaseTimeEnd: Int64!,
+  $limit: Int
+) {
+  conversionReport(
+    purchaseTimeStart: $purchaseTimeStart,
+    purchaseTimeEnd: $purchaseTimeEnd,
+    limit: $limit
+  ) { ${CONVERSION_FIELDS} }
+}`;
+
+const CONVERSION_QUERY_SCROLL = `query ConversionReport(
+  $purchaseTimeStart: Int64!,
+  $purchaseTimeEnd: Int64!,
+  $limit: Int,
+  $scrollId: String!
+) {
+  conversionReport(
+    purchaseTimeStart: $purchaseTimeStart,
+    purchaseTimeEnd: $purchaseTimeEnd,
+    limit: $limit,
+    scrollId: $scrollId
+  ) { ${CONVERSION_FIELDS} }
 }`;
 
 type ConversionItem = {
@@ -129,10 +142,11 @@ export async function syncShopeeConversions(
       purchaseTimeEnd,
       limit,
     };
+    const query = scrollId ? CONVERSION_QUERY_SCROLL : CONVERSION_QUERY;
     if (scrollId) variables.scrollId = scrollId;
 
     const data = await shopeeRequest<{ conversionReport: ConversionReportResponse }>(
-      CONVERSION_QUERY,
+      query,
       variables,
     );
     const report = data.conversionReport;
