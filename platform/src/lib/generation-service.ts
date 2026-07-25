@@ -177,7 +177,7 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 30,
     });
 
-    // Auto-link narrator for legacy campaigns without narratorId
+    // Narrator comes from Campaign.narratorId (set at create). Links legacy rows once.
     const narrator = await resolveAndLinkCampaignNarrator(campaign.id, profileId, {
       socialAccountId: campaign.socialAccountId,
     });

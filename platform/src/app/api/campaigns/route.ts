@@ -7,7 +7,7 @@ import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
 import { ensureCampaignDailyJobs } from "@/lib/scheduling/recurrence";
 import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
-import { resolveAndLinkCampaignNarrator } from "@/lib/narrators/resolve-campaign-narrator";
+import { pickNarratorForProfile } from "@/lib/narrators/resolve-campaign-narrator";
 
 const EDITORIAL_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
 const CONTENT_MODES = [...EDITORIAL_MODES, "mix-editorial"] as const;
@@ -149,6 +149,12 @@ export async function POST(request: NextRequest) {
     const primaryNetwork = targetNetworks[0] ?? "threads";
     const accountId = await getPublishingAccountId(session.user.profile.id, primaryNetwork);
 
+    // Narrator is required for Story Engine — resolve BEFORE insert so the
+    // campaign row never exists without narratorId (avoids null on generation).
+    const narrator = await pickNarratorForProfile(session.user.profile.id, {
+      socialAccountId: accountId,
+    });
+
     const resolvedScheduleTimes = data.approvalMode === "auto"
       ? completeTimes(data.scheduleTimes ?? [], data.trendsPerDay)
       : data.scheduleTimes ?? [];
@@ -165,6 +171,7 @@ export async function POST(request: NextRequest) {
       data: {
         profileId: session.user.profile.id,
         ...(accountId ? { socialAccountId: accountId } : {}),
+        narratorId: narrator.id,
         name: data.name,
         productUrl,
         productName,
@@ -184,19 +191,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Auto-link narrator (same-sex as account, sole active, or create defaults)
-    const linkedNarrator = await resolveAndLinkCampaignNarrator(
-      campaign.id,
-      session.user.profile.id,
-      { socialAccountId: accountId },
-    );
-
     await prisma.campaignEvent.create({
       data: {
         campaignId: campaign.id,
         type: "created",
         title: "Campanha criada",
-        description: `Produto: ${productName} · Rede: ${targetNetworks.join(", ")}`,
+        description: `Produto: ${productName} · Rede: ${targetNetworks.join(", ")} · Narrador: ${narrator.name}`,
       },
     });
 
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        campaign: { ...campaign, narratorId: linkedNarrator.id },
+        campaign,
         jobId: jobs[0]?.id,
         jobIds: jobs.map((generationJob) => generationJob.id),
       },

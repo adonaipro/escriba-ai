@@ -26,44 +26,32 @@ export async function ensureDefaultSexNarrators(profileId: string) {
   }
 }
 
+type ResolveOptions = {
+  preferredSex?: string | null;
+  socialAccountId?: string | null;
+};
+
 /**
- * Resolve a narrator for a campaign that may have no narratorId.
- * Updates the campaign row when linking.
+ * Pick the active narrator for a profile (and optional account).
+ * Does not touch Campaign rows.
+ *
  * Priority:
- *  1) Campaign.narratorId if set and valid
- *  2) Preferred sex (account active narrator / param)
- *  3) Single active narrator on profile
- *  4) Ensure defaults (M+F), then preferred sex or female
+ *  1) Preferred sex (param or active AccountNarrator on social account)
+ *  2) Single active narrator on profile
+ *  3) Ensure defaults (M+F), then preferred sex or female
  */
-export async function resolveAndLinkCampaignNarrator(
-  campaignId: string,
+export async function pickNarratorForProfile(
   profileId: string,
-  options?: {
-    preferredSex?: string | null;
-    socialAccountId?: string | null;
-  },
+  options?: ResolveOptions,
 ) {
-  const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, profileId },
-    include: {
-      narrator: { include: { hypotheses: true } },
-    },
-  });
-  if (!campaign) throw new Error("Campanha não encontrada");
-
-  if (campaign.narratorId && campaign.narrator) {
-    return campaign.narrator;
-  }
-
   let preferredSex: "male" | "female" | null =
     options?.preferredSex === "male" || options?.preferredSex === "female"
       ? options.preferredSex
       : null;
 
-  const accountId = options?.socialAccountId ?? campaign.socialAccountId;
-  if (!preferredSex && accountId) {
+  if (!preferredSex && options?.socialAccountId) {
     const link = await prisma.accountNarrator.findFirst({
-      where: { socialAccountId: accountId, isActive: true },
+      where: { socialAccountId: options.socialAccountId, isActive: true },
       include: { narrator: { select: { sex: true } } },
     });
     if (link?.narrator?.sex === "male" || link?.narrator?.sex === "female") {
@@ -95,16 +83,45 @@ export async function resolveAndLinkCampaignNarrator(
 
   if (!chosen) {
     await ensureDefaultSexNarrators(profileId);
-    const fallback = await prisma.narrator.findFirst({
+    const created = await prisma.narrator.findFirst({
       where: { profileId, status: "active" },
       include: { hypotheses: true },
       orderBy: { createdAt: "asc" },
     });
-    if (!fallback) {
+    if (!created) {
       throw new Error("Não foi possível criar ou localizar um narrador para a campanha.");
     }
-    chosen = fallback;
+    chosen = created;
   }
+
+  return chosen;
+}
+
+/**
+ * Ensure a campaign row has a valid narratorId and return that narrator.
+ * Used by the generation pipeline for campaigns that may predate auto-link.
+ */
+export async function resolveAndLinkCampaignNarrator(
+  campaignId: string,
+  profileId: string,
+  options?: ResolveOptions,
+) {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, profileId },
+    include: {
+      narrator: { include: { hypotheses: true } },
+    },
+  });
+  if (!campaign) throw new Error("Campanha não encontrada");
+
+  if (campaign.narratorId && campaign.narrator) {
+    return campaign.narrator;
+  }
+
+  const chosen = await pickNarratorForProfile(profileId, {
+    preferredSex: options?.preferredSex,
+    socialAccountId: options?.socialAccountId ?? campaign.socialAccountId,
+  });
 
   await prisma.campaign.update({
     where: { id: campaignId },
