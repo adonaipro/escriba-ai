@@ -110,9 +110,10 @@ export async function syncShopeeConversions(
     throw new Error("Credenciais da Shopee não configuradas");
   }
 
-  // GraphQL Int64 scalars accept numeric values in JSON body.
-  const purchaseTimeStart = Math.floor(options.purchaseTimeStart.getTime() / 1000);
-  const purchaseTimeEnd = Math.floor(options.purchaseTimeEnd.getTime() / 1000);
+  // Shopee GraphQL Int64 scalars require string-encoded values in the JSON body
+  // (numeric JSON numbers are rejected with "wrong type").
+  const purchaseTimeStart = String(Math.floor(options.purchaseTimeStart.getTime() / 1000));
+  const purchaseTimeEnd = String(Math.floor(options.purchaseTimeEnd.getTime() / 1000));
   const maxPages = Math.max(1, Math.min(20, options.maxPages ?? 5));
   const limit = 50;
 
