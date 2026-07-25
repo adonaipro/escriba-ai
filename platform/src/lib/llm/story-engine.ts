@@ -34,7 +34,7 @@ import { isInsufficientQuotaError } from "./api-error";
 
 export type { StoryDebugData };
 
-const PROMPT_VERSION = "story-v2.2-product-in-life";
+const PROMPT_VERSION = "story-v2.3-natural-use";
 
 /** Everyday seed situations — pick one by seed. Avoid cliché hubs (mercado, trânsito, chuva, fila). */
 const SITUATION_BANK: string[] = [
@@ -345,13 +345,58 @@ function stripUrls(s: string): string {
 }
 
 /**
+ * Short everyday name for dialogue — never paste marketplace title into the story.
+ * "Bolsa Feminina Transversal E Ombro Luxo..." → "bolsa"
+ */
+function shortProductName(productName: string, categoryLabel?: string): string {
+  const raw = stripUrls(productName).toLowerCase();
+  const cat = (categoryLabel || "").toLowerCase();
+  const hints = [
+    "bolsa",
+    "mochila",
+    "carteira",
+    "tênis",
+    "tenis",
+    "sapato",
+    "sandália",
+    "sandalia",
+    "perfume",
+    "creme",
+    "fone",
+    "relógio",
+    "relogio",
+    "camisa",
+    "vestido",
+    "calça",
+    "calca",
+    "óculos",
+    "oculos",
+    "celular",
+    "capa",
+    "carregador",
+  ];
+  for (const h of hints) {
+    if (raw.includes(h) || cat.includes(h)) return h === "tenis" ? "tênis" : h;
+  }
+  // First meaningful word of the title (not marketing fluff)
+  const word = raw
+    .replace(/[^a-záàâãéêíóôõúç\s]/gi, " ")
+    .split(/\s+/)
+    .find((w) => w.length >= 4);
+  return word || "item";
+}
+
+/**
  * Minimal product facts for accuracy only — never story drivers.
  * Pains / benefits / occasions are intentionally omitted: they induce product-themed plots.
  */
 function buildProductContext(universe: ProductUniverse, productName: string): string {
+  const short = shortProductName(productName, universe.categoryLabel);
   const parts: string[] = [];
-  if (productName) parts.push(`Nome factual: ${stripUrls(productName)}`);
-  if (universe.categoryLabel) parts.push(`Tipo de item (fato): ${stripUrls(universe.categoryLabel)}`);
+  parts.push(`Como a personagem chama o item na vida real (use SÓ isto, nunca o título de anúncio): ${short}`);
+  if (universe.categoryLabel) {
+    parts.push(`Tipo de item (fato interno, não cole no texto): ${stripUrls(universe.categoryLabel)}`);
+  }
   if (universe.restrictions?.length) {
     const bans = universe.restrictions
       .slice(0, 5)
@@ -361,7 +406,7 @@ function buildProductContext(universe: ProductUniverse, productName: string): st
       parts.push(`Não afirme sobre este item: ${bans.join("; ")}`);
     }
   }
-  return parts.join("\n") || `Nome factual: ${stripUrls(productName)}`;
+  return parts.join("\n");
 }
 
 function sexPromptLine(sex: string): string {
@@ -383,32 +428,39 @@ Objetivo único: identificação.
 No final da leitura, a pessoa deve pensar: "isso aconteceu comigo", "conheço alguém assim", "já passei por isso".
 
 Ordem mental obrigatória (não inverta):
-1) Escolha e desenvolva UMA situação humana cotidiana (o user já aponta um ponto de partida — use-o ou desdobre algo igualmente específico e diferente).
-   A história é sobre pessoas, tensão, escolha, constrangimento, alívio, rotina, relação.
-2) Dentro dessa situação já viva, o item da vida real (se houver) participa da experiência do personagem:
-   a personagem usa, manuseia, se apoia nele, ou o momento muda um pouco porque o item está ali.
-   O item NÃO é o tema, NÃO é propaganda, e NÃO é só uma citação decorativa.
+1) Situação humana primeiro — pessoas, tensão, escolha, constrangimento, alívio, rotina, relação.
+2) O item (quando houver) entra porque a personagem REALMENTE o utiliza no meio da cena:
+   carrega, abre, tira algo de dentro, ajusta no ombro, apoia no colo, guarda algo com pressa, troca de mão.
+   Esse uso precisa mudar ou facilitar um instante (encontrar um papel, ter as mãos livres, não derrubar, esconder um objeto, sair mais rápido).
+   Sem o item naquele gesto, o momento seria diferente.
 
-Produto na história (quando houver item):
-- bom: o item entra no gesto, no deslocamento, no preparo, na espera, no encontro — altera ou facilita um instante da cena
-- ruim: "peguei minha bolsa" / "olhei o produto" / menção solta sem função na cena
-- proibido: descobrir o produto, mudar de vida por causa dele, lição de compra, review disfarçado
+Produto — o que NÃO fazer:
+- copiar título de anúncio / nome longo de marketplace ("Bolsa Feminina Transversal Luxo…")
+- menção solta sem uso ("olhei minha bolsa", "peguei a bolsa" e segue a vida igual)
+- propaganda, review, benefício milagroso, "comprei e mudou minha vida"
+- [LINK] em qualquer post que não seja o ÚLTIMO
 
-Diversidade (obrigatório):
-- NÃO recicle o mesmo ambiente/contexto da história anterior
-- EVITE cenários batidos e genéricos: mercado, supermercado, fila, trânsito, chuva na rua, "indo pro trabalho" genérico — a menos que o ponto de partida peça explicitamente outra coisa e ainda assim torne único
-- prefira ângulos específicos e concretos (um detalhe que só aquela cena teria)
+Produto — o que fazer:
+- chamar o item como na vida real: "minha bolsa", "a bolsa", "ela" — uma ou duas palavras
+- o uso é gesto concreto, não adjetivo de vitrine
+
+Cenário:
+- NÃO comece em mercado / supermercado / fila de caixa
+- EVITE trânsito genérico e "indo pro trabalho" genérico
+- prefira ângulos específicos e concretos
+
+Pergunta no fechamento (se houver):
+- PROIBIDO: "Você já…", "E você, já…", "Qual foi a última vez…", "Quem mais…", "Alguém mais…"
+- a pergunta, se existir, nasce do que acabou de acontecer e soa como dúvida honesta, não formulário
 
 Como escrever:
 - natural, cotidiana, espontânea, conversacional, plausível
-- pequenos detalhes concretos da vida real
-- emoção sem exagero
-- sem dramatização forçada, sem plot twist artificial, sem frases de IA
-- se a thread terminar em pergunta: a pergunta nasce do que foi vivido (curiosidade/identificação), nunca formulário do tipo "Você já…?" ou "Qual foi a última vez…?"
+- emoção sem exagero; sem plot twist artificial; sem frases de IA
 
 Formato técnico (obrigatório):
 - escreva 5 a 6 posts em sequência (uma thread)
 - CADA post com no máximo ${THREADS_TEXT_MAX_CHARS} caracteres (limite do Threads), contando espaços e links
+- [LINK] somente no último post (e só uma vez)
 - responda APENAS com JSON válido no formato:
 {"posts":[{"position":1,"content":"..."},{"position":2,"content":"..."}]}`;
 }
@@ -431,16 +483,16 @@ function buildUserPrompt(opts: {
   const situation = pickSituationSeed(opts.seed);
 
   const productBlock = opts.withLink
-    ? `Item que participa da experiência (não é o tema da história):
+    ? `Item na vida da personagem (NÃO é o tema; ela usa de verdade):
 ${opts.productContext}
 
-Regras do item:
-1) Invente a situação humana primeiro.
-2) O item entra naturalmente na vivência do personagem: uso, gesto, preparo, deslocamento, espera, encontro.
-3) A presença do item deve alterar ou facilitar algum momento da cena (mesmo que de leve) — não basta citar.
-4) Proibido: propaganda, review, "comprei e mudou minha vida", menção solta sem função ("peguei X").
-5) Use o marcador [LINK] exatamente com esses 6 caracteres no lugar da URL (não invente domínio).
-6) Se nomear, use o nome factual; sem benefícios milagrosos.`
+Checklist do item (todos obrigatórios):
+1) Situação humana primeiro — sem mercado/supermercado no começo.
+2) Em algum post do meio, a personagem USA o item (gesto concreto).
+3) Esse uso altera ou facilita um momento (sem o item, a cena mudaria).
+4) Nunca cole título de anúncio; só o nome curto do dia a dia.
+5) Coloque [LINK] exatamente uma vez, e somente no ÚLTIMO post.
+6) Sem propaganda, review ou pergunta-formulário ("Você já…", "Qual foi a última vez…").`
     : `Nesta história não use link de produto nem menção comercial.
 Foque só no relato humano identificável.`;
 
