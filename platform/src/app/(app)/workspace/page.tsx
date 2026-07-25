@@ -23,6 +23,12 @@ import { buildDailyPerformance } from "@/lib/analytics/daily-performance";
 import { DateRangeFilter } from "@/components/analytics/date-range-filter";
 import { format } from "date-fns";
 import { PerformanceChart } from "@/components/analytics/performance-chart";
+import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
+import {
+  getShopeeMetricsSummary,
+  syncShopeeConversions,
+  type ShopeeMetricsSummary,
+} from "@/lib/providers/shopee-conversions";
 
 interface AccountMetrics {
   id: string;
@@ -62,7 +68,7 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
         include: {
           publications: {
             where: { OR: [{ status: "published", publishedAt }, { status: { not: "published" } }] },
-            select: { status: true, clicks: true, impressions: true, revenueBrl: true, conversions: true, likes: true, replies: true, reposts: true, quotes: true, shares: true, metricsSyncedAt: true, publishedAt: true },
+            select: { status: true, clicks: true, impressions: true, likes: true, replies: true, reposts: true, quotes: true, shares: true, metricsSyncedAt: true, publishedAt: true },
           },
         },
       },
@@ -75,8 +81,9 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
     const allPubs = everyPublication.filter((publication) => publication.status === "published");
     const totalClicks = allPubs.reduce((s, p) => s + (p.clicks ?? 0), 0);
     const totalImpressions = allPubs.reduce((s, p) => s + (p.impressions ?? 0), 0);
-    const totalConversions = allPubs.reduce((s, p) => s + (p.conversions ?? 0), 0);
-    const totalRevenue = allPubs.reduce((s, p) => s + (p.revenueBrl ?? 0), 0);
+    // Revenue/conversions are profile-level Shopee affiliate metrics (not per social account).
+    const totalConversions = 0;
+    const totalRevenue = 0;
     const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
     const totalEngagements = allPubs.reduce((sum, publication) => sum + (publication.likes ?? 0) + (publication.replies ?? 0) + (publication.reposts ?? 0) + (publication.quotes ?? 0) + (publication.shares ?? 0), 0);
     const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
@@ -111,9 +118,7 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
     };
   });
 
-  const totalRevenue = metrics.reduce((s, m) => s + m.totalRevenue, 0);
   const totalClicks = metrics.reduce((s, m) => s + m.totalClicks, 0);
-  const totalConversions = metrics.reduce((s, m) => s + m.totalConversions, 0);
   const totalImpressions = metrics.reduce((s, m) => s + m.totalImpressions, 0);
   const totalPublications = metrics.reduce((s, m) => s + m.totalPublications, 0);
   const totalCampaigns = metrics.reduce((s, m) => s + m.campaignsCount, 0);
@@ -121,7 +126,7 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
   const totalEngagements = metrics.reduce((s, m) => s + m.totalEngagements, 0);
   const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-  const latestMetricsSync = accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications)).reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
+  const latestThreadsSync = accounts.flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications)).reduce<Date | null>((latest, publication) => !publication.metricsSyncedAt ? latest : !latest || publication.metricsSyncedAt > latest ? publication.metricsSyncedAt : latest, null);
   const publishedForChart = accounts
     .flatMap((account) => account.campaigns.flatMap((campaign) => campaign.publications))
     .filter((publication) => publication.status === "published");
@@ -131,11 +136,58 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
     fillGaps: Boolean(range.from),
   });
 
+  // Same source as Dashboard: Shopee conversionReport (ShopeeConversion table).
+  let shopeeMetrics: ShopeeMetricsSummary | null = null;
+  if (hasShopeeCredentials()) {
+    try {
+      shopeeMetrics = await getShopeeMetricsSummary(profileId, range.from, range.to);
+      const staleMs = 6 * 60 * 60 * 1000;
+      const needsRefresh =
+        !shopeeMetrics.lastSyncedAt ||
+        Date.now() - shopeeMetrics.lastSyncedAt.getTime() > staleMs;
+      if (needsRefresh) {
+        await syncShopeeConversions(profileId, {
+          purchaseTimeStart: range.from ?? new Date(Date.now() - 90 * 86400000),
+          purchaseTimeEnd: range.to,
+          maxPages: 4,
+        }).catch(() => null);
+        shopeeMetrics = await getShopeeMetricsSummary(profileId, range.from, range.to);
+      }
+    } catch {
+      shopeeMetrics = null;
+    }
+  }
+
+  const totalRevenue = shopeeMetrics?.totalCommission ?? 0;
+  const totalConversions = shopeeMetrics?.conversions ?? 0;
+  const latestMetricsSync = shopeeMetrics?.lastSyncedAt ?? latestThreadsSync;
+
   const sorted = [...metrics].sort((a, b) => b.totalImpressions - a.totalImpressions || b.engagementRate - a.engagementRate);
   const bestAccount = sorted[0] ?? null;
   const worstAccount = sorted[sorted.length - 1] !== bestAccount ? sorted[sorted.length - 1] : null;
 
-  return { metrics, bestAccount, worstAccount, dailyPerformance, totals: { totalRevenue, totalClicks, totalConversions, totalImpressions, avgCtr, totalPublications, totalCampaigns, publishedCampaigns, totalEngagements, engagementRate, latestMetricsSync } };
+  return {
+    metrics,
+    bestAccount,
+    worstAccount,
+    dailyPerformance,
+    shopeeMetrics,
+    totals: {
+      totalRevenue,
+      totalClicks,
+      totalConversions,
+      totalImpressions,
+      avgCtr,
+      totalPublications,
+      totalCampaigns,
+      publishedCampaigns,
+      totalEngagements,
+      engagementRate,
+      latestMetricsSync,
+      itemsSold: shopeeMetrics?.itemsSold ?? 0,
+      orders: shopeeMetrics?.orders ?? 0,
+    },
+  };
 }
 
 function NetworkChip({ network }: { network: string }) {
@@ -176,7 +228,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
 
   const params = await searchParams;
   const range = resolveDateRange(params.period, params.from, params.to);
-  const { metrics, bestAccount, worstAccount, dailyPerformance, totals } = await getWorkspaceData(session.user.profile.id, range);
+  const { metrics, bestAccount, worstAccount, dailyPerformance, shopeeMetrics, totals } =
+    await getWorkspaceData(session.user.profile.id, range);
 
   return (
     <div className="space-y-8">
@@ -196,75 +249,146 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         <DateRangeFilter period={range.period} from={range.fromInput} to={range.toInput} />
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
           <span>Comparação de posts publicados em: {range.label}.</span>
-          <span>{totals.latestMetricsSync ? `Última sincronização: ${format(totals.latestMetricsSync, "dd/MM/yyyy HH:mm")}` : "Aguardando primeira sincronização de métricas"}</span>
+          <span>
+            {totals.latestMetricsSync
+              ? `Última sincronização: ${format(totals.latestMetricsSync, "dd/MM/yyyy HH:mm")}`
+              : "Aguardando primeira sincronização de métricas"}
+          </span>
         </div>
       </div>
 
-      {/* Global KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        {[
-          {
-            label: "Receita total",
-            value: formatCurrency(totals.totalRevenue),
-            sub: `${totals.totalConversions} conversões`,
-            icon: DollarSign,
-            color: "text-emerald-400",
-            bg: "bg-emerald-600/10",
-          },
-          {
-            label: "Visualizações",
-            value: formatNumber(totals.totalImpressions),
-            sub: totals.totalClicks > 0 ? `${formatNumber(totals.totalClicks)} cliques rastreados` : "cliques ainda não rastreados",
-            icon: Eye,
-            color: "text-blue-400",
-            bg: "bg-blue-600/10",
-          },
-          {
-            label: "Interações",
-            value: formatNumber(totals.totalEngagements),
-            sub: `${formatPercent(totals.engagementRate)} de engajamento`,
-            icon: Users,
-            color: "text-amber-400",
-            bg: "bg-amber-600/10",
-          },
-          {
-            label: "Posts publicados",
-            value: formatNumber(totals.totalPublications),
-            sub: "blocos enviados ao Threads",
-            icon: CheckCircle2,
-            color: "text-blue-400",
-            bg: "bg-blue-600/10",
-          },
-          {
-            label: "Campanhas publicadas",
-            value: String(totals.publishedCampaigns),
-            sub: `${totals.totalCampaigns} campanhas criadas`,
-            icon: BarChart3,
-            color: "text-pink-400",
-            bg: "bg-pink-600/10",
-          },
-          {
-            label: "Contas ativas",
-            value: String(metrics.length),
-            sub: "comparação individual disponível",
-            icon: Activity,
-            color: "text-cyan-400",
-            bg: "bg-cyan-600/10",
-          },
-        ].map((m) => (
-          <Card key={m.label}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-zinc-400">{m.label}</span>
-                <div className={`rounded-lg p-1.5 ${m.bg}`}>
-                  <m.icon className={`h-4 w-4 ${m.color}`} />
+      {/* Shopee affiliate KPIs — same source as Dashboard (conversionReport / ShopeeConversion) */}
+      {shopeeMetrics && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Shopee afiliados</p>
+            <span className="text-[11px] text-zinc-600">
+              Fonte: conversionReport
+              {shopeeMetrics.lastSyncedAt
+                ? ` · sincronizado ${format(shopeeMetrics.lastSyncedAt, "dd/MM/yyyy HH:mm")}`
+                : ""}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+            {[
+              {
+                label: "Comissão acumulada",
+                value: formatCurrency(totals.totalRevenue),
+                sub: "totalCommission (painel Shopee)",
+                icon: DollarSign,
+                color: "text-emerald-400",
+                bg: "bg-emerald-600/10",
+              },
+              {
+                label: "Conversões",
+                value: formatNumber(totals.totalConversions),
+                sub: "conversionIds únicos",
+                icon: TrendingUp,
+                color: "text-pink-400",
+                bg: "bg-pink-600/10",
+              },
+              {
+                label: "Pedidos",
+                value: formatNumber(totals.orders),
+                sub: `${shopeeMetrics.completedOrders} completed · ${shopeeMetrics.pendingOrders} pending`,
+                icon: BarChart3,
+                color: "text-amber-400",
+                bg: "bg-amber-600/10",
+              },
+              {
+                label: "Itens vendidos",
+                value: formatNumber(totals.itemsSold),
+                sub: "soma de qty nos itens",
+                icon: Activity,
+                color: "text-cyan-400",
+                bg: "bg-cyan-600/10",
+              },
+              {
+                label: "Receita (GMV)",
+                value: formatCurrency(shopeeMetrics.revenueGmv),
+                sub: "itemPrice × qty",
+                icon: DollarSign,
+                color: "text-blue-400",
+                bg: "bg-blue-600/10",
+              },
+            ].map((m) => (
+              <Card key={m.label}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-zinc-400">{m.label}</span>
+                    <div className={`rounded-lg p-1.5 ${m.bg}`}>
+                      <m.icon className={`h-4 w-4 ${m.color}`} />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
+                  <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Threads / content KPIs */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Threads · conteúdo</p>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+          {[
+            {
+              label: "Visualizações",
+              value: formatNumber(totals.totalImpressions),
+              sub: totals.totalClicks > 0 ? `${formatNumber(totals.totalClicks)} cliques rastreados` : "insights do Threads",
+              icon: Eye,
+              color: "text-blue-400",
+              bg: "bg-blue-600/10",
+            },
+            {
+              label: "Interações",
+              value: formatNumber(totals.totalEngagements),
+              sub: `${formatPercent(totals.engagementRate)} de engajamento`,
+              icon: Users,
+              color: "text-amber-400",
+              bg: "bg-amber-600/10",
+            },
+            {
+              label: "Posts publicados",
+              value: formatNumber(totals.totalPublications),
+              sub: "blocos enviados ao Threads",
+              icon: CheckCircle2,
+              color: "text-blue-400",
+              bg: "bg-blue-600/10",
+            },
+            {
+              label: "Campanhas publicadas",
+              value: String(totals.publishedCampaigns),
+              sub: `${totals.totalCampaigns} campanhas criadas`,
+              icon: BarChart3,
+              color: "text-pink-400",
+              bg: "bg-pink-600/10",
+            },
+            {
+              label: "Contas ativas",
+              value: String(metrics.length),
+              sub: "comparação individual disponível",
+              icon: Activity,
+              color: "text-cyan-400",
+              bg: "bg-cyan-600/10",
+            },
+          ].map((m) => (
+            <Card key={m.label}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-zinc-400">{m.label}</span>
+                  <div className={`rounded-lg p-1.5 ${m.bg}`}>
+                    <m.icon className={`h-4 w-4 ${m.color}`} />
+                  </div>
                 </div>
-              </div>
-              <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
-              <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="text-2xl font-bold text-zinc-100">{m.value}</div>
+                <p className="text-xs text-zinc-500 mt-1">{m.sub}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       <PerformanceChart data={dailyPerformance} />
@@ -487,10 +611,10 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
                     return null;
                   })()}
 
-                  {metrics.every((m) => m.totalRevenue === 0) && (
+                  {totals.totalRevenue === 0 && (
                     <div className="rounded-lg border border-zinc-800 p-2.5">
                       <p className="text-xs text-zinc-500">
-                        Conversões ainda não estão disponíveis. A comparação acima usa somente visualizações e interações reais do Threads.
+                        Comissão Shopee zerada neste período. A comparação por conta usa visualizações e interações do Threads; a comissão é do conversionReport do afiliado.
                       </p>
                     </div>
                   )}
