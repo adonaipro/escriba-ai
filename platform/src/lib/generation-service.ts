@@ -2,6 +2,10 @@ import { prisma } from "./db";
 import { getLlmProvider, resolveEffectiveLlmConfig } from "./llm";
 import type { NarrativeInput, NarrativeOutput, NarratorContext } from "./llm/types";
 import { selectHypothesisValue } from "./narrators/hypothesis-engine";
+import {
+  assertNarratorIdentityMatchesText,
+  type NarratorIdentity,
+} from "./narrators/identity-guard";
 import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
 import { buildNarrativeLLM } from "./llm/narrative-engine";
 import type { ContentMode } from "./llm/pipeline-types";
@@ -172,55 +176,40 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 30,
     });
 
-    // ─── Narrator context ───────────────────────────────────────────
-    let narratorContext: NarratorContext | undefined;
-    let activeHypotheses: Array<{ dimension: string; value: string }> | undefined;
+    // ─── Narrator: ALWAYS from Campaign — never UI / active account / other narrator ──
     const narrator = campaign.narrator;
-
-    if (narrator) {
-      narratorContext = {
-        id: narrator.id,
-        name: narrator.name,
-        sex: narrator.sex as "female" | "male",
-        ageRange: narrator.ageRange,
-        maritalStatus: narrator.maritalStatus,
-        hasChildren: narrator.hasChildren,
-        livesAlone: narrator.livesAlone,
-      };
-
-      // Filter hypotheses for this niche
-      const niche = campaign.profile?.niche ?? "";
-      const nicheHypotheses = narrator.hypotheses.filter((h) => h.niche === niche);
-      const allHypotheses = nicheHypotheses.length > 0 ? nicheHypotheses : narrator.hypotheses;
-
-      // Select one value per dimension (exploration-first)
-      activeHypotheses = DIMENSIONS.map((dim) => ({
-        dimension: dim,
-        value: selectHypothesisValue(allHypotheses, dim),
-      }));
-
-      // Increment usage counts for selected hypotheses
-      for (const h of activeHypotheses) {
-        const normalizedValue = h.dimension === "productStrategy"
-          ? normalizeProductStrategy(h.value)
-          : h.value;
-
-        await prisma.narratorHypothesis.updateMany({
-          where: {
-            narratorId: narrator.id,
-            dimension: h.dimension,
-            value: normalizedValue !== h.value ? { in: [h.value, normalizedValue] } : h.value,
-          },
-          data: { usageCount: { increment: 1 } },
-        });
-      }
-
-      // Update narrator narrative count
-      await prisma.narrator.update({
-        where: { id: narrator.id },
-        data: { totalNarratives: { increment: 1 } },
-      });
+    if (!campaign.narratorId || !narrator) {
+      throw new Error(
+        "Campanha sem narrador vinculado. Vincule um narrador à campanha antes de gerar conteúdo.",
+      );
     }
+
+    const narratorIdentity: NarratorIdentity = {
+      name: narrator.name,
+      sex: narrator.sex,
+      ageRange: narrator.ageRange,
+      maritalStatus: narrator.maritalStatus,
+      hasChildren: narrator.hasChildren,
+      livesAlone: narrator.livesAlone,
+    };
+
+    const narratorContext: NarratorContext = {
+      id: narrator.id,
+      name: narrator.name,
+      sex: narrator.sex as "female" | "male",
+      ageRange: narrator.ageRange,
+      maritalStatus: narrator.maritalStatus,
+      hasChildren: narrator.hasChildren,
+      livesAlone: narrator.livesAlone,
+    };
+
+    const niche = campaign.profile?.niche ?? "";
+    const nicheHypotheses = narrator.hypotheses.filter((h) => h.niche === niche);
+    const allHypotheses = nicheHypotheses.length > 0 ? nicheHypotheses : narrator.hypotheses;
+    const activeHypotheses = DIMENSIONS.map((dim) => ({
+      dimension: dim,
+      value: selectHypothesisValue(allHypotheses, dim),
+    }));
     // ────────────────────────────────────────────────────────────────
 
     let contentMode: string | undefined;
@@ -280,15 +269,19 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       progress: 55,
     });
 
+    // Always pass campaign narrator identity — never omit (avoids female default fallback)
     const generated = llmConfig
       ? await buildNarrativeLLM(
           productName, productUrl, Date.now() + trendCount * 137,
           narratorContext, undefined, undefined, llmConfig,
-          narratorContext ? {
-            name: narratorContext.name, sex: narratorContext.sex, ageRange: narratorContext.ageRange,
-            maritalStatus: narratorContext.maritalStatus, hasChildren: narratorContext.hasChildren,
+          {
+            name: narratorContext.name,
+            sex: narratorContext.sex,
+            ageRange: narratorContext.ageRange,
+            maritalStatus: narratorContext.maritalStatus,
+            hasChildren: narratorContext.hasChildren,
             livesAlone: narratorContext.livesAlone,
-          } : undefined,
+          },
           undefined, contentMode as ContentMode | undefined,
         )
       : await provider.generateNarrative(input);
@@ -309,6 +302,9 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     // Refuse to persist/schedule Threads-oversized posts (no silent truncate)
     assertThreadsPostsWithinLimit(output.posts);
 
+    // Hard gate: gender/voice identity must match campaign narrator before any persist
+    assertNarratorIdentityMatchesText(output.posts, narratorIdentity);
+
     await updateJob(jobId, {
       status: "writing",
       statusLabel: "Salvando narrativa...",
@@ -318,11 +314,30 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     // Normalize product strategy from output
     const productStrategy = normalizeProductStrategy(output.productStrategy ?? "hybrid");
 
+    // Hypothesis / narrator counters only after successful validation
+    for (const h of activeHypotheses) {
+      const normalizedValue = h.dimension === "productStrategy"
+        ? normalizeProductStrategy(h.value)
+        : h.value;
+      await prisma.narratorHypothesis.updateMany({
+        where: {
+          narratorId: narrator.id,
+          dimension: h.dimension,
+          value: normalizedValue !== h.value ? { in: [h.value, normalizedValue] } : h.value,
+        },
+        data: { usageCount: { increment: 1 } },
+      });
+    }
+    await prisma.narrator.update({
+      where: { id: narrator.id },
+      data: { totalNarratives: { increment: 1 } },
+    });
+
     // Save trend with experiment dimension data
     const trend = await prisma.trend.create({
       data: {
         campaignId: campaign.id,
-        narratorId: narrator?.id ?? undefined,
+        narratorId: narrator.id,
         format: output.format,
         contentMode: contentMode ?? undefined,
         hook: output.hook,
@@ -408,13 +423,11 @@ export async function processGenerationJob(jobId: string): Promise<void> {
         campaignId: campaign.id,
         type: "generated",
         title: "Nova história gerada",
-        description: narrator
-          ? `Narrador "${narrator.name}" · Papel "${output.role ?? output.character}" · Emoção "${output.emotion}" · Estratégia "${productStrategy}"`
-          : `Papel "${output.role ?? output.character}" · Emoção "${output.emotion}" · Conflito com "${output.conflictObject ?? output.object}"`,
+        description: `Narrador "${narrator.name}" · Papel "${output.role ?? output.character}" · Emoção "${output.emotion}" · Estratégia "${productStrategy}"`,
         metadata: JSON.stringify({
           trendId: trend.id,
           provider: provider.name,
-          narratorId: narrator?.id,
+          narratorId: narrator.id,
           family: output.family,
           emotion: output.emotion,
           character: output.character,

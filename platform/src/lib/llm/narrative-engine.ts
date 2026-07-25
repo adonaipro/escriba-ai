@@ -914,9 +914,16 @@ export async function buildNarrativeLLM(
 
   const personality = buildNarratorPersonality(narrator);
 
+  // Prefer explicit narratorData; never invent a default opposite-sex persona.
+  // If only NarratorFilter is provided, require sex; otherwise fail closed.
+  if (!narratorData && !narrator?.sex) {
+    throw new Error(
+      "Narrador obrigatório para geração LLM: informe sex/name do narrador da campanha.",
+    );
+  }
   const baseProfile = narratorData ?? {
-    name:          "Ela",
-    sex:           narrator?.sex ?? "female",
+    name:          narrator?.sex === "male" ? "Ele" : "Ela",
+    sex:           narrator!.sex,
     ageRange:      narrator?.ageRange ?? "30-39",
     maritalStatus: narrator?.maritalStatus ?? "married",
     hasChildren:   narrator?.hasChildren ?? false,
