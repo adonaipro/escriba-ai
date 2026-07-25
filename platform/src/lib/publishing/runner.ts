@@ -10,7 +10,10 @@ export async function runDueThreadsPublications(take = 5) {
     where: {
       status: "scheduled",
       scheduledAt: { lte: new Date() },
+      // Require: scheduled Publication(s) + active campaign + active Threads account
+      publications: { some: { status: "scheduled" } },
       campaign: {
+        status: { notIn: ["paused", "ended"] },
         targetNetwork: "threads",
         socialAccount: { isMock: false, status: "active", accessToken: { not: null } },
       },

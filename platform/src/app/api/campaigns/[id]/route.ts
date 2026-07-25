@@ -80,15 +80,43 @@ export async function PATCH(
     const body = await request.json();
     const data = updateSchema.parse(body);
 
-    const updated = await prisma.campaign.update({
-      where: { id },
-      data: {
-        ...data,
-        ...(data.status === "scaling" ? { mode: "scale" } : {}),
-        ...(data.status === "paused" ? { pausedAt: new Date() } : {}),
-        ...(data.status === "ended" ? { endedAt: new Date() } : {}),
-        ...(data.status === "testing" && campaign.status === "paused" ? { pausedAt: null } : {}),
-      },
+    const pausing = data.status === "paused" && campaign.status !== "paused";
+    const resuming =
+      campaign.status === "paused" &&
+      !!data.status &&
+      data.status !== "paused" &&
+      data.status !== "ended";
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const campaignRow = await tx.campaign.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(data.status === "scaling" ? { mode: "scale" } : {}),
+          ...(data.status === "paused" ? { pausedAt: new Date() } : {}),
+          ...(data.status === "ended" ? { endedAt: new Date() } : {}),
+          ...(resuming ? { pausedAt: null } : {}),
+          ...(data.status === "testing" && campaign.status === "paused" ? { pausedAt: null } : {}),
+        },
+      });
+
+      // Pause: hold future/pending calendar items without deleting schedule times
+      if (pausing) {
+        await tx.publication.updateMany({
+          where: { campaignId: id, status: "scheduled" },
+          data: { status: "paused" },
+        });
+      }
+
+      // Resume: restore held items; scheduledAt is never touched
+      if (resuming) {
+        await tx.publication.updateMany({
+          where: { campaignId: id, status: "paused" },
+          data: { status: "scheduled" },
+        });
+      }
+
+      return campaignRow;
     });
 
     return NextResponse.json({ campaign: updated });
