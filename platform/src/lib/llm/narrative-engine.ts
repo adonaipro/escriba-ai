@@ -26,7 +26,6 @@ import { writeNarrative } from "./narrative-writer";
 import type { LlmProviderConfig } from "./types";
 import type { PipelineNarratorData, VoiceToneExperiment } from "./pipeline-types";
 import { runStoryEngine, type StoryDebugData } from "./story-engine";
-import { generateBestIncident } from "./incident-engine";
 import { generateContentPost, type SingleContentMode } from "./content-engine";
 import type { ContentMode } from "./pipeline-types";
 
@@ -937,11 +936,8 @@ export async function buildNarrativeLLM(
     expressionStyle: personality.expressionStyle,
   };
 
-  // Quando customTheme está ativo, o incident engine geraria incidentes do tema padrão
-  // (traição/fofoca) que sobrescrevem o tema do usuário via "Não substitua por outro conflito".
-  // Nesse caso, deixamos o story engine guiar-se apenas pelo customTheme.
-  const incidentResult = customTheme ? null : await generateBestIncident(universe, productName, seed, llmConfig, narratorFull);
-
+  // Story Engine V2: no incident pre-script, no RAG few-shots.
+  // LLM invents the everyday situation; we only pass product + sex + limits.
   const withLink = contentMode !== "story-organico";
 
   const storyResult = await runStoryEngine(
@@ -953,21 +949,11 @@ export async function buildNarrativeLLM(
     llmConfig,
     withLink,
     voiceExperiment,
-    incidentResult?.selectedIncident,
+    undefined,
     customTheme,
   );
 
-  const mergedDebug: StoryDebugData = incidentResult
-    ? {
-        ...storyResult.debug,
-        incidentExperiment: {
-          ...incidentResult.debug,
-          incidentInjected: true,
-          incidentFollowed: storyResult.debug.incidentFollowed ?? false,
-          retryTriggered: storyResult.debug.retryTriggered ?? false,
-        },
-      }
-    : storyResult.debug;
+  const mergedDebug: StoryDebugData = storyResult.debug;
 
   const llmPosts = storyResult.posts.map(p => ({
     position: p.position,
@@ -993,15 +979,15 @@ export async function buildNarrativeLLM(
     setting:         "não especificado",
     twist:           conflict.essence,
     hook,
-    narrativeSummary: `${storyResult.conflictSelection.character} · ${emotion} · ${conflict.name}`,
+    narrativeSummary: hook.slice(0, 160) || "relato identificável",
     productPosition:  productPos > 0 ? productPos : llmPosts.length,
     productStrategy:  strategy,
     tone:             toneMap[personality.expressionStyle]  ?? "objetivo",
     rhythm:           rhythmMap[personality.expressionStyle] ?? "médio",
-    conflictType:     conflict.category,
-    structureType:    "story-engine",
-    openingStyle:     "conflito-humano",
-    questionType:     "moral",
+    conflictType:     "livre",
+    structureType:    "story-engine-v2",
+    openingStyle:     "livre",
+    questionType:     "identificação",
     posts:            llmPosts,
     pipelineDebug:    mergedDebug,
   };

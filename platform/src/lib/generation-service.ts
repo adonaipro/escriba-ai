@@ -3,7 +3,7 @@ import { getLlmProvider, resolveEffectiveLlmConfig } from "./llm";
 import type { NarrativeInput, NarrativeOutput, NarratorContext } from "./llm/types";
 import { selectHypothesisValue } from "./narrators/hypothesis-engine";
 import {
-  assertNarratorIdentityMatchesText,
+  assertNarratorSexMatchesText,
   type NarratorIdentity,
 } from "./narrators/identity-guard";
 import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
@@ -303,7 +303,8 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     assertThreadsPostsWithinLimit(output.posts);
 
     // Hard gate: gender/voice identity must match campaign narrator before any persist
-    assertNarratorIdentityMatchesText(output.posts, narratorIdentity);
+    // Story Engine V2: only sex/pronoun coherence (full biographical lock would kill free situations)
+    assertNarratorSexMatchesText(output.posts, narratorIdentity);
 
     await updateJob(jobId, {
       status: "writing",

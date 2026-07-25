@@ -209,3 +209,34 @@ export function assertNarratorIdentityMatchesText(
     );
   }
 }
+
+/**
+ * Story Engine V2: only sex/pronoun/relationship coherence is enforced at save time.
+ * Full biographical identity remains available via assertNarratorIdentityMatchesText.
+ */
+export function assertNarratorSexMatchesText(
+  posts: Array<{ content: string }>,
+  identity: Pick<NarratorIdentity, "name" | "sex">,
+): void {
+  const sex = normalizeNarratorSex(identity.sex);
+  if (!sex) {
+    throw new Error(
+      `Identidade do narrador inválida: sexo "${identity.sex}" não reconhecido (use male/female).`,
+    );
+  }
+  const text = posts.map((p) => p.content).join("\n");
+  const full: NarratorIdentity = {
+    name: identity.name,
+    sex: identity.sex,
+    ageRange: "26-35",
+    maritalStatus: "other",
+    hasChildren: true,
+    livesAlone: false,
+  };
+  const violations = findGenderVoiceViolations(text, full);
+  if (violations.length > 0) {
+    throw new Error(
+      `Sexo/pronomes do narrador "${identity.name}" (${sexLabel(identity.sex)}) violados pelo texto: ${violations.join("; ")}. Geração rejeitada — nada foi salvo nem agendado.`,
+    );
+  }
+}
