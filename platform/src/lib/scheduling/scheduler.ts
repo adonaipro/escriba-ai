@@ -62,7 +62,8 @@ export function nextCampaignSlot(
   const days = config.scheduleDays?.length ? config.scheduleDays : [0, 1, 2, 3, 4, 5, 6];
   const startKey = localDateKey(after);
 
-  for (let dayOffset = 0; dayOffset <= 21; dayOffset++) {
+  // Up to ~2 months so large batches (e.g. 10+) with few daily times still allocate.
+  for (let dayOffset = 0; dayOffset <= 62; dayOffset++) {
     const dateKey = addLocalDays(startKey, dayOffset);
     if (!days.includes(weekdayLocal(dateKey))) continue;
     for (const time of times) {
@@ -83,6 +84,29 @@ export function formatSlotTimeSP(date: Date): string {
     minute: "2-digit",
     hour12: false,
   }).format(date);
+}
+
+/**
+ * Next `count` free campaign slots (may span multiple days).
+ * Schedules only distribute generated narratives — never invent times.
+ */
+export function allocateNextCampaignSlots(
+  raw: string | null | undefined,
+  count: number,
+  after = new Date(),
+  occupiedMs?: Set<number>,
+): Date[] {
+  const slots: Date[] = [];
+  const occupied = occupiedMs ?? new Set<number>();
+  let cursor = after;
+  for (let i = 0; i < count; i++) {
+    const next = nextCampaignSlot(raw, cursor, occupied);
+    if (!next) break;
+    slots.push(next);
+    occupied.add(next.getTime());
+    cursor = next;
+  }
+  return slots;
 }
 
 async function loadOccupiedSlotsForAccount(

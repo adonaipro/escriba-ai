@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { getLlmProvider, resolveEffectiveLlmConfig } from "./llm";
-import type { NarrativeInput, NarrativeOutput, NarratorContext } from "./llm/types";
+import type { NarrativeInput, NarrativeOutput, NarratorContext, LlmProviderConfig } from "./llm/types";
 import { selectHypothesisValue } from "./narrators/hypothesis-engine";
 import {
   assertNarratorSexMatchesText,
@@ -11,6 +11,7 @@ import { nextCampaignSlot, scheduleTrend } from "./scheduling/scheduler";
 import { buildNarrativeLLM } from "./llm/narrative-engine";
 import type { ContentMode } from "./llm/pipeline-types";
 import { assertThreadsPostsWithinLimit } from "./publishing/threads-limits";
+import { withGenerationRetry } from "./llm/resilient-generate";
 
 type HypothesisDimension = "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType";
 const DIMENSIONS: HypothesisDimension[] = ["tone", "rhythm", "productStrategy", "questionType", "conflictType", "openingStyle", "structureType"];
@@ -291,37 +292,73 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       .filter((s) => s.length > 0)
       .slice(0, 6);
 
-    const generated = llmConfig
-      ? await buildNarrativeLLM(
-          productName, productUrl, Date.now() + trendCount * 137,
-          sexOnly,
-          undefined, undefined, llmConfig,
-          sexOnly,
-          undefined, contentMode as ContentMode | undefined,
-          undefined,
-          avoidContexts,
-        )
-      : await provider.generateNarrative(input);
-    const output: NarrativeOutput = "format" in generated ? generated : {
-      hook: generated.hook, narrativeSummary: generated.narrativeSummary,
-      format: generated.structureType || generated.family || "staircase",
-      family: generated.family, emotion: generated.emotion, character: generated.role,
-      setting: generated.setting, object: generated.conflictObject,
-      conflict: generated.narrativeSummary, twist: generated.twist,
-      role: generated.role, conflictObject: generated.conflictObject,
-      sceneMoment: generated.sceneMoment, moralQuestion: generated.moralQuestion,
-      productPosition: generated.productPosition, productStrategy: generated.productStrategy,
-      tone: generated.tone, rhythm: generated.rhythm, structureType: generated.structureType,
-      openingStyle: generated.openingStyle, conflictType: generated.conflictType,
-      questionType: generated.questionType, posts: generated.posts,
-    };
-
-    // Refuse to persist/schedule Threads-oversized posts (no silent truncate)
-    assertThreadsPostsWithinLimit(output.posts);
-
-    // Hard gate: gender/voice identity must match campaign narrator before any persist
-    // Story Engine V2: only sex/pronoun coherence (full biographical lock would kill free situations)
-    assertNarratorSexMatchesText(output.posts, narratorIdentity);
+    // Resilient generation: retries + timeout + provider fallback; discard invalid attempts.
+    // Job only proceeds when a fully valid narrative is ready (no partial persist).
+    const output = await withGenerationRetry(
+      async (config: LlmProviderConfig | null, attempt: number) => {
+        const activeProvider = getLlmProvider(config);
+        const generated = config
+          ? await buildNarrativeLLM(
+              productName,
+              productUrl,
+              Date.now() + trendCount * 137 + attempt * 9973,
+              sexOnly,
+              undefined,
+              undefined,
+              config,
+              sexOnly,
+              undefined,
+              contentMode as ContentMode | undefined,
+              undefined,
+              avoidContexts,
+            )
+          : await activeProvider.generateNarrative({
+              ...input,
+              regenerationSeed: Date.now() + attempt * 9973,
+            });
+        const mapped: NarrativeOutput = "format" in generated
+          ? generated
+          : {
+              hook: generated.hook,
+              narrativeSummary: generated.narrativeSummary,
+              format: generated.structureType || generated.family || "staircase",
+              family: generated.family,
+              emotion: generated.emotion,
+              character: generated.role,
+              setting: generated.setting,
+              object: generated.conflictObject,
+              conflict: generated.narrativeSummary,
+              twist: generated.twist,
+              role: generated.role,
+              conflictObject: generated.conflictObject,
+              sceneMoment: generated.sceneMoment,
+              moralQuestion: generated.moralQuestion,
+              productPosition: generated.productPosition,
+              productStrategy: generated.productStrategy,
+              tone: generated.tone,
+              rhythm: generated.rhythm,
+              structureType: generated.structureType,
+              openingStyle: generated.openingStyle,
+              conflictType: generated.conflictType,
+              questionType: generated.questionType,
+              posts: generated.posts,
+            };
+        if (!mapped.posts?.length || !mapped.hook?.trim()) {
+          throw new Error("Narrativa vazia");
+        }
+        // Skip hooks already used in this campaign (no duplicates of approved/saved stories)
+        const dup = await prisma.trend.findFirst({
+          where: { campaignId: campaign.id, hook: mapped.hook },
+          select: { id: true },
+        });
+        if (dup) throw new Error("Narrativa duplicada — regenerando");
+        assertThreadsPostsWithinLimit(mapped.posts);
+        assertNarratorSexMatchesText(mapped.posts, narratorIdentity);
+        return mapped;
+      },
+      llmConfig,
+      { label: "campanha", maxAttempts: 6 },
+    );
 
     await updateJob(jobId, {
       status: "writing",

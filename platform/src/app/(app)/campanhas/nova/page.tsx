@@ -204,7 +204,7 @@ const schema = z.object({
   marketplace: z.string().min(1),
   language: z.string().min(1),
   approvalMode: z.string().min(1),
-  trendsPerDay: z.number().int().min(1).max(10),
+  trendsPerDay: z.number().int().min(1).max(20),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
@@ -214,22 +214,19 @@ type FormData = z.infer<typeof schema>;
 // ─── Generation Progress ──────────────────────────────────────────────────────
 
 type GenerationState = {
-  jobId: string; campaignId: string; status: string;
-  statusLabel: string; progress: number; error?: string;
+  jobIds: string[];
+  campaignId: string;
+  status: string;
+  statusLabel: string;
+  progress: number;
+  error?: string;
+  expected: number;
 };
-
-const STEPS = [
-  { label: "Analisando produto",   minProgress: 0 },
-  { label: "Planejando narrativa", minProgress: 25 },
-  { label: "Gerando história",     minProgress: 50 },
-  { label: "Salvando narrativa",   minProgress: 70 },
-  { label: "Registrando padrões",  minProgress: 85 },
-];
 
 function GenerationProgress({ state }: { state: GenerationState }) {
   const router = useRouter();
   const completed = state.status === "completed";
-  const failed    = state.status === "failed";
+  const failed = state.status === "failed";
 
   useEffect(() => {
     if (completed && state.campaignId) {
@@ -251,59 +248,32 @@ function GenerationProgress({ state }: { state: GenerationState }) {
               ) : failed ? (
                 <XCircle className="h-8 w-8 text-red-400" />
               ) : (
-                <Sparkles className="h-8 w-8 text-pink-400 animate-pulse" />
+                <Loader2 className="h-8 w-8 text-pink-400 animate-spin" />
               )}
             </div>
 
             <div>
               <h2 className="text-lg font-semibold text-zinc-100">
-                {completed ? "Narrativa gerada" : failed ? "Falha na geração" : "A Entidade está trabalhando"}
+                {completed ? "Geração concluída" : failed ? "Não foi possível concluir" : "Gerando…"}
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
                 {completed
                   ? "Redirecionando para a campanha..."
                   : failed
-                    ? (state.error ?? "Ocorreu um erro. Tente novamente.")
-                    : state.statusLabel}
+                    ? "Tente novamente em instantes."
+                    : "Gerando…"}
               </p>
             </div>
 
-            {!failed && (
-              <div className="w-full space-y-3">
-                <div className="flex justify-between text-xs text-zinc-500">
-                  <span>{state.statusLabel}</span>
-                  <span>{state.progress}%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      completed ? "bg-emerald-500" : "bg-pink-500"
-                    }`}
-                    style={{ width: `${state.progress}%` }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5 pt-2">
-                  {STEPS.map((step) => {
-                    const done   = state.progress > step.minProgress + 20;
-                    const active = state.progress >= step.minProgress && !done;
-                    return (
-                      <div key={step.label} className="flex items-center gap-2">
-                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${
-                          done ? "bg-emerald-500" : active ? "bg-pink-400 animate-pulse" : "bg-zinc-700"
-                        }`} />
-                        <span className={`text-xs transition-colors ${
-                          done ? "text-emerald-400" : active ? "text-zinc-200" : "text-zinc-600"
-                        }`}>{step.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+            {!failed && !completed && (
+              <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                <div className="h-full w-1/3 rounded-full bg-pink-500 animate-pulse" />
               </div>
             )}
 
             {failed && (
               <Button variant="outline" onClick={() => router.push(`/campanhas/${state.campaignId}`)}>
-                Ver campanha mesmo assim
+                Ver campanha
               </Button>
             )}
           </div>
@@ -433,18 +403,58 @@ export default function NovaCampanhaPage() {
 
   // ── Poll ──────────────────────────────────────────────────────────
 
-  async function pollJob(jobId: string, campaignId: string) {
+  async function pollJobs(jobIds: string[], campaignId: string, expected: number) {
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/generation-jobs/${jobId}`);
-        if (!res.ok) return;
-        const { job } = await res.json() as {
-          job: { status: string; statusLabel: string; progress: number; error?: string };
-        };
-        setGeneration({ jobId, campaignId, status: job.status, statusLabel: job.statusLabel, progress: job.progress, error: job.error });
-        if (job.status === "completed" || job.status === "failed") {
+        const results = await Promise.all(
+          jobIds.map(async (id) => {
+            const res = await fetch(`/api/generation-jobs/${id}`);
+            if (!res.ok) return null;
+            const { job } = await res.json() as {
+              job: { status: string; statusLabel: string; progress: number; error?: string };
+            };
+            return job;
+          }),
+        );
+        const jobs = results.filter(Boolean) as Array<{ status: string; progress: number }>;
+        const done = jobs.filter((j) => j.status === "completed").length;
+        const failed = jobs.filter((j) => j.status === "failed").length;
+        const allSettled = jobs.length === jobIds.length && jobs.every((j) => j.status === "completed" || j.status === "failed");
+
+        // User only sees "Gerando…" until the full batch is complete — no partial counts.
+        if (allSettled && done === expected) {
+          setGeneration({
+            jobIds,
+            campaignId,
+            status: "completed",
+            statusLabel: "Gerando…",
+            progress: 100,
+            expected,
+          });
           if (pollRef.current) clearInterval(pollRef.current);
+          return;
         }
+        if (allSettled && done < expected) {
+          setGeneration({
+            jobIds,
+            campaignId,
+            status: "failed",
+            statusLabel: "Gerando…",
+            progress: 0,
+            expected,
+          });
+          if (pollRef.current) clearInterval(pollRef.current);
+          return;
+        }
+        setGeneration({
+          jobIds,
+          campaignId,
+          status: "processing",
+          statusLabel: "Gerando…",
+          progress: Math.min(95, Math.round((done / Math.max(expected, 1)) * 100)),
+          expected,
+        });
+        void failed; // failed attempts are retried server-side; UI stays on Gerando…
       } catch { /* silent */ }
     }, 1500);
   }
@@ -510,12 +520,25 @@ export default function NovaCampanhaPage() {
           scheduleTimes: effectiveScheduleTimes,
         }),
       });
-      const json = await res.json() as { campaign?: { id: string }; jobId?: string; error?: string };
+      const json = await res.json() as {
+        campaign?: { id: string };
+        jobId?: string;
+        jobIds?: string[];
+        error?: string;
+      };
       if (!res.ok) {
         setError(json.error ?? "Erro ao criar campanha.");
-      } else if (json.campaign && json.jobId) {
-        setGeneration({ jobId: json.jobId, campaignId: json.campaign.id, status: "pending", statusLabel: "Iniciando...", progress: 5 });
-        await pollJob(json.jobId, json.campaign.id);
+      } else if (json.campaign && (json.jobIds?.length || json.jobId)) {
+        const jobIds = json.jobIds?.length ? json.jobIds : json.jobId ? [json.jobId] : [];
+        setGeneration({
+          jobIds,
+          campaignId: json.campaign.id,
+          status: "processing",
+          statusLabel: "Gerando…",
+          progress: 5,
+          expected: jobIds.length,
+        });
+        await pollJobs(jobIds, json.campaign.id, jobIds.length);
       } else {
         router.push(`/campanhas/${json.campaign?.id}`);
       }
@@ -799,18 +822,20 @@ export default function NovaCampanhaPage() {
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Trends per day */}
+            {/* Batch size for this generation (max 20); schedules distribute across days */}
             <div className="space-y-2">
-              <Label htmlFor="trendsPerDay">Narrativas por dia</Label>
+              <Label htmlFor="trendsPerDay">Narrativas nesta geração</Label>
               <Input
                 id="trendsPerDay"
                 type="number"
                 min={1}
-                max={10}
+                max={20}
                 className="w-32"
                 {...register("trendsPerDay", { valueAsNumber: true })}
               />
-              <p className="text-xs text-zinc-500">Quantas histórias novas gerar por dia</p>
+              <p className="text-xs text-zinc-500">
+                Máximo 20. Os horários só distribuem as narrativas nos próximos slots disponíveis.
+              </p>
             </div>
 
             {/* Days of week */}

@@ -5,9 +5,10 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
-import { ensureCampaignDailyJobs } from "@/lib/scheduling/recurrence";
 import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
 import { pickNarratorForProfile } from "@/lib/narrators/resolve-campaign-narrator";
+import { allocateNextCampaignSlots } from "@/lib/scheduling/scheduler";
+import { MAX_GENERATION_COUNT } from "@/lib/llm/resilient-generate";
 
 const EDITORIAL_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
 const CONTENT_MODES = [...EDITORIAL_MODES, "mix-editorial"] as const;
@@ -40,7 +41,7 @@ const createSchema = z.object({
   targetNetwork: z.string().optional().default("threads"),
   language: z.string().default("pt-BR"),
   approvalMode: z.string().default("manual"),
-  trendsPerDay: z.number().int().min(1).max(10).default(2),
+  trendsPerDay: z.number().int().min(1).max(MAX_GENERATION_COUNT).default(2),
   postsPerDay: z.number().int().min(0).max(20).default(7),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
@@ -202,16 +203,60 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let jobs = await ensureCampaignDailyJobs(campaign.id);
-    if (jobs.length === 0) {
-      jobs = await prisma.$transaction(
-        Array.from({ length: data.trendsPerDay }, () =>
-          prisma.generationJob.create({ data: { campaignId: campaign.id } }),
-        ),
+    // Quantity = trendsPerDay (1..20). Schedules only distribute across next free slots (multi-day).
+    const count = Math.max(1, Math.min(MAX_GENERATION_COUNT, data.trendsPerDay));
+    const slots = allocateNextCampaignSlots(customSchedule, count, new Date());
+    if (slots.length < count) {
+      return NextResponse.json(
+        {
+          error:
+            "Não foi possível alocar todos os horários para o lote. Verifique os dias/horários da campanha.",
+        },
+        { status: 400 },
       );
     }
+
+    const jobs = await prisma.$transaction(
+      Array.from({ length: count }, (_, slotIndex) => {
+        const targetSlot = slots[slotIndex] ?? slots[slots.length - 1]!;
+        const dateKey = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Sao_Paulo",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(targetSlot);
+        return prisma.generationJob.create({
+          data: {
+            campaignId: campaign.id,
+            generationKey: `${campaign.id}:batch:${dateKey}:${slotIndex}`,
+            targetSlot,
+            targetDate: new Date(`${dateKey}T12:00:00-03:00`),
+            slotIndex,
+          },
+        });
+      }),
+    );
+
+    // Process sequentially; each job retries internally until a valid narrative is persisted.
     void (async () => {
-      for (const generationJob of jobs) await processGenerationJob(generationJob.id);
+      for (const generationJob of jobs) {
+        await processGenerationJob(generationJob.id);
+        // If still failed after internal retries, recreate and try once more (batch completeness)
+        const fresh = await prisma.generationJob.findUnique({ where: { id: generationJob.id } });
+        if (fresh?.status === "failed") {
+          await prisma.generationJob.update({
+            where: { id: generationJob.id },
+            data: {
+              status: "pending",
+              statusLabel: "Gerando…",
+              error: null,
+              progress: 0,
+              completedAt: null,
+            },
+          });
+          await processGenerationJob(generationJob.id);
+        }
+      }
     })();
 
     return NextResponse.json(

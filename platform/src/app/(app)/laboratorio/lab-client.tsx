@@ -1226,11 +1226,12 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                 )}
 
                 <div>
-                  <label className="text-xs font-medium text-zinc-400 block mb-1">Quantidade</label>
-                  <div className="flex gap-2">
-                    {[1, 3, 5, 10].map((n) => (
+                  <label className="text-xs font-medium text-zinc-400 block mb-1">Quantidade (máx. 20)</label>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {[1, 3, 5, 10, 20].map((n) => (
                       <button
                         key={n}
+                        type="button"
                         onClick={() => setCount(n)}
                         className={cn(
                           "w-10 h-8 rounded-lg text-sm font-medium border transition-colors",
@@ -1242,11 +1243,23 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
                         {n}
                       </button>
                     ))}
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={count}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (!Number.isFinite(v)) return;
+                        setCount(Math.max(1, Math.min(20, Math.floor(v))));
+                      }}
+                      className="w-16 h-8 rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-sm text-zinc-100"
+                    />
                   </div>
                 </div>
                 <Button
                   onClick={() => void generate("single")}
-                  disabled={loading || narrators.length === 0}
+                  disabled={loading || narrators.length === 0 || count < 1 || count > 20}
                   className="w-full gap-2 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:opacity-90 text-white"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
@@ -1258,11 +1271,6 @@ export function LabClient({ narrators, products }: { narrators: NarratorData[]; 
 
               {result && (
                 <div className="space-y-3">
-                  {result.warning && (
-                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-                      {result.warning}
-                    </p>
-                  )}
                   {result.narratives.length > 1 && (
                     <Button type="button" variant="outline" className="w-full gap-2 border-pink-700/50 text-pink-300" onClick={() => openPromoteAll(result.narratives)}>
                       <Rocket className="h-4 w-4" />

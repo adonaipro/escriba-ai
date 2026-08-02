@@ -3,19 +3,27 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
-// In-memory rate limiter: 20 LLM calls per profile per 60s
+// Rate limit counts only *successful* narratives (failed retries do not count).
 const rlMap = new Map<string, { count: number; resetAt: number }>();
 
-function checkRateLimit(key: string, max = 20, windowMs = 60_000): boolean {
+function canStartGeneration(key: string, want: number, max = 40, windowMs = 60_000): boolean {
   const now = Date.now();
   const entry = rlMap.get(key);
   if (!entry || entry.resetAt <= now) {
-    rlMap.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
+    rlMap.set(key, { count: 0, resetAt: now + windowMs });
+    return want <= max;
   }
-  if (entry.count >= max) return false;
-  entry.count++;
-  return true;
+  return entry.count + want <= max;
+}
+
+function recordSuccessfulGenerations(key: string, n: number, max = 40, windowMs = 60_000): void {
+  const now = Date.now();
+  const entry = rlMap.get(key);
+  if (!entry || entry.resetAt <= now) {
+    rlMap.set(key, { count: Math.max(0, n), resetAt: now + windowMs });
+    return;
+  }
+  entry.count += Math.max(0, n);
 }
 import { prisma } from "@/lib/db";
 import {
@@ -33,6 +41,12 @@ import { resolveEffectiveLlmConfig } from "@/lib/llm";
 import { computeSimilarityMatrix, type BatchNarrative } from "@/lib/llm/narrative-batch";
 import { validateCoherence } from "@/lib/products/coherence-validator";
 import { buildUniverseFromStoredAnalysis } from "@/lib/llm/product-intelligence-engine";
+import {
+  assertGenerationCount,
+  completeGenerationBatch,
+  GenerationBatchError,
+  MAX_GENERATION_COUNT,
+} from "@/lib/llm/resilient-generate";
 
 type NarratorRow = Awaited<ReturnType<typeof fetchNarrator>>;
 
@@ -212,6 +226,10 @@ async function generateOneLLM(
   };
 }
 
+/**
+ * Always returns exactly `n` valid narratives (1..20).
+ * Failed attempts are discarded and regenerated — never partial batches.
+ */
 async function generateNLLM(
   narrator: NonNullable<NarratorRow>,
   productName: string,
@@ -225,42 +243,40 @@ async function generateNLLM(
   customTheme?: string,
 ): Promise<LabNarrative[]> {
   const seed = baseSeed ?? Date.now();
-  const cap = Math.max(1, Math.min(n, 10));
+  const count = Math.max(1, Math.min(n, MAX_GENERATION_COUNT));
+  const concurrency =
+    llmConfig?.provider === "groq" ? 1 : llmConfig?.provider === "openai" ? 2 : 2;
 
-  // Groq free tier: 12k TPM — run sequentially to avoid rate limit
-  if (llmConfig?.provider === "groq" || llmConfig?.provider === "openai") {
-    const results: Array<LabNarrative | undefined> = new Array(cap);
-    const errors: Array<string | undefined> = new Array(cap);
-    const concurrency = llmConfig.provider === "openai" ? Math.min(2, cap) : 1;
-    let nextIndex = 0;
-
-    async function worker(): Promise<void> {
-      while (nextIndex < cap) {
-        const index = nextIndex++;
-        try {
-          results[index] = await generateOneLLM(
-            narrator, productName, productUrl, llmConfig, strategy,
-            seed + index * 137, storedAnalysis, undefined, contentMode, customTheme,
-          );
-        } catch (error) {
-          errors[index] = error instanceof Error ? error.message : String(error);
-        }
+  return completeGenerationBatch<LabNarrative>({
+    count,
+    primaryConfig: llmConfig,
+    concurrency,
+    generateOne: async (config, index, attempt) => {
+      const item = await generateOneLLM(
+        narrator,
+        productName,
+        productUrl,
+        config,
+        strategy,
+        seed + index * 137 + attempt * 9973,
+        storedAnalysis,
+        undefined,
+        contentMode,
+        customTheme,
+      );
+      if (!item.posts?.length || !item.hook?.trim()) {
+        throw new Error("Narrativa vazia");
       }
-    }
-
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    const completed = results.filter((result): result is LabNarrative => result !== undefined);
-    const failures = errors.filter((error): error is string => error !== undefined);
-    if (completed.length === 0 && failures.length > 0) throw new Error(failures[0]);
-    if (failures.length > 0) console.warn(`[Laboratorio] ${failures.length} de ${cap} narrativas falharam:`, failures);
-    return completed;
-  }
-
-  return Promise.all(
-    Array.from({ length: cap }, (_, i) =>
-      generateOneLLM(narrator, productName, productUrl, llmConfig, strategy, seed + i * 137, storedAnalysis, undefined, contentMode, customTheme),
-    ),
-  );
+      return item;
+    },
+    isValid: (item, accepted) => {
+      const hook = item.hook?.trim().toLowerCase() ?? "";
+      if (!hook) return false;
+      // Avoid duplicates already in this batch (approved/accepted ones)
+      if (accepted.some((a) => (a.hook?.trim().toLowerCase() ?? "") === hook)) return false;
+      return true;
+    },
+  });
 }
 
 function toSimilarityShape(n: BuiltNarrative, idx: number): BatchNarrative {
@@ -343,13 +359,8 @@ export async function POST(req: NextRequest) {
   const llmConfigRow = await prisma.llmConfig.findUnique({ where: { profileId } });
   const llmConfig = resolveEffectiveLlmConfig(llmConfigRow);
 
-  // Rate limit LLM calls only (staircase is free/cheap)
-  if (llmConfig && !checkRateLimit(`lab:${profileId}`)) {
-    return NextResponse.json(
-      { error: "Muitas gerações em pouco tempo. Aguarde 1 minuto e tente novamente." },
-      { status: 429 },
-    );
-  }
+  // Rate limit only applies to successful completions (checked before start for capacity).
+  // Failed retries do not consume the user quota.
 
   // Resolve product — DB analysis preferred over free text
   let productName = body.productName ?? "";
@@ -379,16 +390,30 @@ export async function POST(req: NextRequest) {
     if (mode === "single") {
       const narrator = await fetchNarrator(body.narratorId ?? "", profileId);
       if (!narrator) return NextResponse.json({ error: "Narrador não encontrado" }, { status: 404 });
-      const count = Math.max(1, Math.min(body.count ?? 1, 10));
+      let count: number;
+      try {
+        count = assertGenerationCount(body.count ?? 1);
+      } catch (e) {
+        const err = e as GenerationBatchError;
+        return NextResponse.json({ error: err.message }, { status: err.status ?? 400 });
+      }
+      if (llmConfig && !canStartGeneration(`lab:${profileId}`, count)) {
+        return NextResponse.json(
+          { error: "Muitas gerações em pouco tempo. Aguarde 1 minuto e tente novamente." },
+          { status: 429 },
+        );
+      }
       const narratives = llmConfig
         ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis, body.contentMode, body.customTheme)
         : generateN(narrator, productName, productUrl, count, undefined, undefined, storedAnalysis);
+      if (narratives.length !== count) {
+        // Hard guarantee — should never happen with completeGenerationBatch
+        throw new GenerationBatchError("Lote incompleto. Tente novamente.", 503);
+      }
+      if (llmConfig) recordSuccessfulGenerations(`lab:${profileId}`, count);
       return NextResponse.json({
         narratives,
         isLLM: !!llmConfig,
-        warning: narratives.length < count
-          ? `${narratives.length} de ${count} narrativas foram concluídas. As demais falharam após as tentativas automáticas.`
-          : undefined,
         entityExplanation: buildEntityExplanation(narrator, narratives[0], "explorar combinações livres", productInfo),
       });
     }
@@ -397,12 +422,26 @@ export async function POST(req: NextRequest) {
     if (mode === "benchmark") {
       const narrator = await fetchNarrator(body.narratorId ?? "", profileId);
       if (!narrator) return NextResponse.json({ error: "Narrador não encontrado" }, { status: 404 });
-      const count = llmConfig
-        ? 5
-        : Math.max(10, Math.min(body.count ?? 10, 50));
+      let count: number;
+      try {
+        count = assertGenerationCount(llmConfig ? (body.count ?? 5) : (body.count ?? 10));
+      } catch (e) {
+        const err = e as GenerationBatchError;
+        return NextResponse.json({ error: err.message }, { status: err.status ?? 400 });
+      }
+      if (llmConfig && !canStartGeneration(`lab:${profileId}`, count)) {
+        return NextResponse.json(
+          { error: "Muitas gerações em pouco tempo. Aguarde 1 minuto e tente novamente." },
+          { status: 429 },
+        );
+      }
       const narratives = llmConfig
         ? await generateNLLM(narrator, productName, productUrl, count, llmConfig, undefined, undefined, storedAnalysis)
         : generateN(narrator, productName, productUrl, count, undefined, undefined, storedAnalysis);
+      if (narratives.length !== count) {
+        throw new GenerationBatchError("Lote incompleto. Tente novamente.", 503);
+      }
+      if (llmConfig) recordSuccessfulGenerations(`lab:${profileId}`, count);
       const shapes = narratives.map((n, i) => toSimilarityShape(n, i));
       const matrix = computeSimilarityMatrix(shapes);
       const scores = matrix.flat().filter((v) => v > 0);
@@ -497,10 +536,14 @@ export async function POST(req: NextRequest) {
     }
 
   } catch (err) {
+    if (err instanceof GenerationBatchError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.error("[Laboratorio] LLM error:", message);
+    // Never leak partial counts — user only sees generic generating failure
     return NextResponse.json(
-      { error: `Erro ao gerar narrativa: ${message}` },
+      { error: "Não foi possível concluir a geração. Tente novamente." },
       { status: 500 },
     );
   }
