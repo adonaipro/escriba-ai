@@ -7,7 +7,12 @@ import { z } from "zod";
 import { processGenerationJob } from "@/lib/generation-service";
 import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
 import { pickNarratorForProfile } from "@/lib/narrators/resolve-campaign-narrator";
-import { allocateNextCampaignSlots } from "@/lib/scheduling/scheduler";
+import {
+  allocateNextCampaignSlots,
+  formatSlotTimeSP,
+  localDateKey,
+  parseScheduleTimes,
+} from "@/lib/scheduling/scheduler";
 import { MAX_GENERATION_COUNT } from "@/lib/llm/resilient-generate";
 
 const EDITORIAL_MODES = ["story-produto", "story-organico", "desabafo", "polemica", "pergunta"] as const;
@@ -216,19 +221,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // generationKey matches recurrence format (campaign:date:slotIndex) so daily
+    // recurrence cannot spawn duplicate jobs for the same schedule slot.
+    const scheduleTimes = parseScheduleTimes(customSchedule);
     const jobs = await prisma.$transaction(
-      Array.from({ length: count }, (_, slotIndex) => {
-        const targetSlot = slots[slotIndex] ?? slots[slots.length - 1]!;
-        const dateKey = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Sao_Paulo",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(targetSlot);
-        return prisma.generationJob.create({
-          data: {
+      Array.from({ length: count }, (_, i) => {
+        const targetSlot = slots[i]!;
+        const dateKey = localDateKey(targetSlot);
+        const time = formatSlotTimeSP(targetSlot);
+        const slotIndex = Math.max(0, scheduleTimes.indexOf(time));
+        return prisma.generationJob.upsert({
+          where: { generationKey: `${campaign.id}:${dateKey}:${slotIndex}` },
+          update: { targetSlot },
+          create: {
             campaignId: campaign.id,
-            generationKey: `${campaign.id}:batch:${dateKey}:${slotIndex}`,
+            generationKey: `${campaign.id}:${dateKey}:${slotIndex}`,
             targetSlot,
             targetDate: new Date(`${dateKey}T12:00:00-03:00`),
             slotIndex,

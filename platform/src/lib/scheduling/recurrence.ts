@@ -61,9 +61,12 @@ export async function ensureCampaignDailyJobs(campaignId: string, now = new Date
     ),
   );
 
+  // Daily fill is capped by configured times (one narrative per schedule time).
+  // trendsPerDay is the batch size at creation — not a reason to invent extra slots.
+  const dailyCap = Math.min(Math.max(1, campaign.trendsPerDay), times.length);
   let missing = Math.max(
     0,
-    campaign.trendsPerDay -
+    dailyCap -
       existingTrends.length -
       existingJobs.filter((job) => job.status !== "completed").length,
   );
@@ -76,7 +79,7 @@ export async function ensureCampaignDailyJobs(campaignId: string, now = new Date
       targetSlot: campaignSlotAt(dateKey, time),
     }))
     .filter(({ targetSlot }) => targetSlot > now && !occupiedSlots.has(targetSlot.getTime()))
-    .slice(0, campaign.trendsPerDay);
+    .slice(0, dailyCap);
 
   const jobs = [];
   for (const { slotIndex, targetSlot } of slotsToday) {

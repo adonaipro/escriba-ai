@@ -118,9 +118,13 @@ async function updateJob(
 
 export async function processGenerationJob(jobId: string): Promise<void> {
   try {
+    const existing = await prisma.generationJob.findUnique({ where: { id: jobId } });
+    // Idempotent: never create a second narrative for an already-completed job
+    if (existing?.status === "completed" && existing.trendId) return;
+
     await updateJob(jobId, {
       status: "analyzing",
-      statusLabel: "Analisando produto...",
+      statusLabel: "Gerando…",
       progress: 10,
       startedAt: new Date(),
     });
@@ -142,6 +146,7 @@ export async function processGenerationJob(jobId: string): Promise<void> {
     });
 
     if (!job) throw new Error("Job não encontrado");
+    if (job.status === "completed" && job.trendId) return;
 
     const { campaign } = job;
     const profileId = campaign.profileId;
