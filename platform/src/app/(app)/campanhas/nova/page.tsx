@@ -314,7 +314,11 @@ export default function NovaCampanhaPage() {
   const [selectedNetworks, setSelectedNetworks] = useState<string[]>(["threads"]);
 
   // ── Schedule ──────────────────────────────────────────────────────
-  const [scheduleDays,  setScheduleDays]  = useState<number[]>([1, 2, 3, 4, 5]);
+  const [smartDistribution, setSmartDistribution] = useState(true);
+  const [publishDaily, setPublishDaily] = useState(true);
+  const [setStartDate, setSetStartDate] = useState(false);
+  const [setEndDate, setSetEndDate] = useState(false);
+  const [scheduleDays,  setScheduleDays]  = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [scheduleTimes, setScheduleTimes] = useState<string[]>(["09:00", "12:00", "20:00"]);
   const [newTime, setNewTime] = useState("12:00");
 
@@ -491,12 +495,30 @@ export default function NovaCampanhaPage() {
       return;
     }
     let effectiveScheduleTimes = [...scheduleTimes];
-    if (/^\d{2}:\d{2}$/.test(newTime) && !effectiveScheduleTimes.includes(newTime)) {
-      effectiveScheduleTimes.push(newTime);
+    if (!smartDistribution) {
+      if (/^\d{2}:\d{2}$/.test(newTime) && !effectiveScheduleTimes.includes(newTime)) {
+        effectiveScheduleTimes.push(newTime);
+      }
+      effectiveScheduleTimes = [...new Set(effectiveScheduleTimes.filter((t) => /^\d{2}:\d{2}$/.test(t)))].sort();
+      if (effectiveScheduleTimes.length === 0) {
+        setError("Adicione pelo menos um horário de publicação (ex.: 09:00, 12:00, 20:00).");
+        return;
+      }
+    } else {
+      effectiveScheduleTimes = []; // server builds human-like times
     }
-    effectiveScheduleTimes = [...new Set(effectiveScheduleTimes.filter((t) => /^\d{2}:\d{2}$/.test(t)))].sort();
-    if (effectiveScheduleTimes.length === 0) {
-      setError("Adicione pelo menos um horário de publicação (ex.: 09:00, 12:00, 20:00).");
+
+    const effectiveDays = publishDaily ? [0, 1, 2, 3, 4, 5, 6] : scheduleDays;
+    if (!publishDaily && effectiveDays.length === 0) {
+      setError("Selecione pelo menos um dia da semana.");
+      return;
+    }
+    if (setStartDate && !data.startDate) {
+      setError("Informe a data de início.");
+      return;
+    }
+    if (setEndDate && !data.endDate) {
+      setError("Informe a data de encerramento.");
       return;
     }
 
@@ -516,8 +538,11 @@ export default function NovaCampanhaPage() {
           productName: needsProduct ? (products[0]?.name ?? "") : "Sem produto",
           targetNetworks: selectedNetworks,
           targetNetwork: selectedNetworks[0] ?? "threads",
-          scheduleDays,
+          scheduleDays: effectiveDays,
           scheduleTimes: effectiveScheduleTimes,
+          smartDistribution,
+          startDate: setStartDate ? data.startDate || null : null,
+          endDate: setEndDate ? data.endDate || null : null,
         }),
       });
       const json = await res.json() as {
@@ -822,7 +847,6 @@ export default function NovaCampanhaPage() {
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Batch size for this generation (max 20); schedules distribute across days */}
             <div className="space-y-2">
               <Label htmlFor="trendsPerDay">Narrativas nesta geração</Label>
               <Input
@@ -833,87 +857,143 @@ export default function NovaCampanhaPage() {
                 className="w-32"
                 {...register("trendsPerDay", { valueAsNumber: true })}
               />
-              <p className="text-xs text-zinc-500">
-                Máximo 20. Os horários só distribuem as narrativas nos próximos slots disponíveis.
-              </p>
+              <p className="text-xs text-zinc-500">Máximo 20 por geração.</p>
             </div>
 
-            {/* Days of week */}
-            <div className="space-y-2">
-              <Label>Dias da semana</Label>
-              <div className="flex gap-1.5 flex-wrap">
-                {DAYS.map((d) => {
-                  const active = scheduleDays.includes(d.value);
-                  return (
-                    <button
-                      key={d.value}
-                      type="button"
-                      onClick={() => toggleDay(d.value)}
-                      className={[
-                        "h-9 w-10 rounded-md text-xs font-medium border transition-colors",
-                        active
-                          ? "border-pink-600 bg-pink-600/20 text-pink-300"
-                          : "border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600",
-                      ].join(" ")}
-                    >
-                      {d.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-zinc-600"
+                checked={smartDistribution}
+                onChange={(e) => setSmartDistribution(e.target.checked)}
+              />
+              <span>
+                <span className="text-sm font-medium text-zinc-100">
+                  Usar distribuição inteligente{" "}
+                  <span className="text-pink-400 font-normal">(Recomendado)</span>
+                </span>
+                <span className="block text-xs text-zinc-500 mt-0.5">
+                  Calcula horários naturais ao longo do período. Você não precisa escolher horários.
+                </span>
+              </span>
+            </label>
 
-            {/* Time slots */}
-            <div className="space-y-2">
-              <Label>Horários de publicação</Label>
-              <div className="flex flex-wrap gap-2">
-                {scheduleTimes.map((t) => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-300"
-                  >
-                    <Clock className="h-3 w-3 text-zinc-500" />
-                    {t}
-                    <button
-                      type="button"
-                      onClick={() => removeTime(t)}
-                      className="text-zinc-600 hover:text-red-400 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="time"
-                  value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  className="w-36"
-                />
-                <Button type="button" variant="outline" size="sm" onClick={addTime} className="gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />
-                  Adicionar horário
-                </Button>
-              </div>
-            </div>
-
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-4">
+            {!smartDistribution && (
               <div className="space-y-2">
+                <Label>Horários de publicação</Label>
+                <div className="flex flex-wrap gap-2">
+                  {scheduleTimes.map((t) => (
+                    <span
+                      key={t}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-300"
+                    >
+                      <Clock className="h-3 w-3 text-zinc-500" />
+                      {t}
+                      <button
+                        type="button"
+                        onClick={() => removeTime(t)}
+                        className="text-zinc-600 hover:text-red-400 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="time"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="w-36"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={addTime} className="gap-1.5">
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar horário
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-zinc-600"
+                checked={publishDaily}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setPublishDaily(on);
+                  if (on) setScheduleDays([0, 1, 2, 3, 4, 5, 6]);
+                  else setScheduleDays([1, 2, 3, 4, 5]);
+                }}
+              />
+              <span>
+                <span className="text-sm font-medium text-zinc-100">Publicar diariamente</span>
+                <span className="block text-xs text-zinc-500 mt-0.5">
+                  Todos os dias da semana. Desmarque para escolher dias específicos.
+                </span>
+              </span>
+            </label>
+
+            {!publishDaily && (
+              <div className="space-y-2">
+                <Label>Dias da semana</Label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DAYS.map((d) => {
+                    const active = scheduleDays.includes(d.value);
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => toggleDay(d.value)}
+                        className={[
+                          "h-9 w-10 rounded-md text-xs font-medium border transition-colors",
+                          active
+                            ? "border-pink-600 bg-pink-600/20 text-pink-300"
+                            : "border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600",
+                        ].join(" ")}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-zinc-600"
+                checked={setStartDate}
+                onChange={(e) => setSetStartDate(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-zinc-100">Definir data de início</span>
+            </label>
+            {setStartDate && (
+              <div className="space-y-2 pl-7">
                 <Label htmlFor="startDate">Data de início</Label>
                 <Input id="startDate" type="date" {...register("startDate")} />
+                <p className="text-xs text-zinc-500">Sem data, a campanha começa imediatamente.</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="endDate">
-                  Data de encerramento
-                  <span className="ml-1 text-xs text-zinc-500">(opcional)</span>
-                </Label>
-                <Input id="endDate" type="date" {...register("endDate")} />
-              </div>
-            </div>
+            )}
 
-            {/* Approval */}
+            <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-zinc-600"
+                checked={setEndDate}
+                onChange={(e) => setSetEndDate(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-zinc-100">Definir data de encerramento</span>
+            </label>
+            {setEndDate && (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor="endDate">Data de encerramento</Label>
+                <Input id="endDate" type="date" {...register("endDate")} />
+                <p className="text-xs text-zinc-500">Sem data, permanece ativa até pausar manualmente.</p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Aprovação das narrativas</Label>
               <Select defaultValue="manual" onValueChange={(v) => setValue("approvalMode", v)}>

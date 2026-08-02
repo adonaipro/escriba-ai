@@ -109,6 +109,80 @@ export function allocateNextCampaignSlots(
   return slots;
 }
 
+/** Deterministic 0..mod-1 jitter from seed + salt. */
+function hashJitter(seed: number, salt: number, mod: number): number {
+  if (mod <= 0) return 0;
+  let x = (Math.imul(seed ^ (salt * 2654435761), 1597334677) >>> 0) + salt * 17;
+  x ^= x >>> 16;
+  x = Math.imul(x, 2246822519);
+  return (x >>> 0) % mod;
+}
+
+function minutesToHHMM(totalMinutes: number): string {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.floor(totalMinutes)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Human-like publication times for "distribuição inteligente".
+ * Spreads `count` (capped per day) across ~08:00–22:30 with uneven gaps and minute jitter.
+ * Not equally spaced; min gap ~70 min so posts never cluster.
+ */
+export function buildSmartScheduleTimes(narrativeCount: number, seed = Date.now()): string[] {
+  const n = Math.min(Math.max(Math.floor(narrativeCount) || 1, 1), 10);
+  const dayStart = 8 * 60; // 08:00
+  const dayEnd = 22 * 60 + 30; // 22:30
+  const minGap = 70;
+  const maxGap = 200;
+
+  if (n === 1) {
+    const mid = dayStart + Math.floor((dayEnd - dayStart) * 0.45);
+    return [minutesToHHMM(mid + hashJitter(seed, 1, 40) - 20)];
+  }
+
+  // First post: morning window 08:05–09:40
+  const first = dayStart + 5 + hashJitter(seed, 0, 95);
+  const lastTarget = dayEnd - 10 - hashJitter(seed, 99, 25);
+  const usable = Math.max(minGap * (n - 1), lastTarget - first);
+  const baseGap = usable / (n - 1);
+
+  const minutes: number[] = [first];
+  for (let i = 1; i < n; i++) {
+    const jitterFactor = 0.72 + hashJitter(seed, i * 3, 56) / 100; // ~0.72–1.28
+    let gap = Math.round(baseGap * jitterFactor);
+    gap = Math.max(minGap, Math.min(maxGap, gap));
+    // Occasional slightly longer pause (lunch / evening feel)
+    if (hashJitter(seed, i * 11, 5) === 0) {
+      gap = Math.min(maxGap, gap + 15 + hashJitter(seed, i, 25));
+    }
+    let next = minutes[i - 1]! + gap;
+    if (i === n - 1) {
+      // Pull last into evening window if still early
+      next = Math.max(next, lastTarget - hashJitter(seed, 7, 30));
+      next = Math.min(next, dayEnd - 5);
+    }
+    if (next > dayEnd - 5) {
+      // Compress remaining slots toward end of day
+      const remaining = n - i;
+      const room = dayEnd - 5 - minutes[i - 1]!;
+      next = minutes[i - 1]! + Math.max(minGap, Math.floor(room / remaining));
+      next = Math.min(next, dayEnd - 5);
+    }
+    minutes.push(next);
+  }
+
+  // Ensure strictly increasing unique minutes
+  for (let i = 1; i < minutes.length; i++) {
+    if (minutes[i]! <= minutes[i - 1]!) {
+      minutes[i] = minutes[i - 1]! + minGap;
+    }
+  }
+
+  return minutes.map(minutesToHHMM);
+}
+
 async function loadOccupiedSlotsForAccount(
   socialAccountId: string | null | undefined,
   excludeTrendId?: string,

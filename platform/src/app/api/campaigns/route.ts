@@ -9,6 +9,7 @@ import { getPublishingAccountId, getSelectedAccountId } from "@/lib/account";
 import { pickNarratorForProfile } from "@/lib/narrators/resolve-campaign-narrator";
 import {
   allocateNextCampaignSlots,
+  buildSmartScheduleTimes,
   formatSlotTimeSP,
   localDateKey,
   parseScheduleTimes,
@@ -48,11 +49,13 @@ const createSchema = z.object({
   approvalMode: z.string().default("manual"),
   trendsPerDay: z.number().int().min(1).max(MAX_GENERATION_COUNT).default(2),
   postsPerDay: z.number().int().min(0).max(20).default(7),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: z.string().optional().nullable(),
+  endDate: z.string().optional().nullable(),
   // New: schedule
   scheduleDays: z.array(z.number().int().min(0).max(6)).optional(),
   scheduleTimes: z.array(z.string()).optional(),
+  /** When true, server builds human-like scheduleTimes; manual times optional. */
+  smartDistribution: z.boolean().optional().default(false),
   contentMode: z.enum(CONTENT_MODES).optional().default("story-produto"),
   editorialModes: z.array(z.enum(EDITORIAL_MODES)).min(1).max(5).optional(),
 }).superRefine((val, ctx) => {
@@ -157,23 +160,41 @@ export async function POST(request: NextRequest) {
       socialAccountId: accountId,
     });
 
-    // Persist exact user scheduleTimes — no automatic fill/truncate.
-    // (manual review still creates paused publications; auto creates scheduled ones).
-    const resolvedScheduleTimes = resolveScheduleTimes(data.scheduleTimes);
+    // Quantity drives smart distribution density; manual mode keeps exact user times.
+    const count = Math.max(1, Math.min(MAX_GENERATION_COUNT, data.trendsPerDay));
+    const smart = data.smartDistribution === true;
+    let resolvedScheduleTimes = resolveScheduleTimes(data.scheduleTimes);
+    if (smart || resolvedScheduleTimes.length === 0) {
+      if (smart) {
+        resolvedScheduleTimes = buildSmartScheduleTimes(count, Date.now());
+      }
+    }
     if (resolvedScheduleTimes.length === 0) {
       return NextResponse.json(
         { error: "Configure pelo menos um horário de publicação (ex.: 09:00, 12:00, 20:00)." },
         { status: 400 },
       );
     }
+    const scheduleDays =
+      data.scheduleDays && data.scheduleDays.length > 0
+        ? data.scheduleDays
+        : [0, 1, 2, 3, 4, 5, 6];
     const customSchedule = JSON.stringify({
       contentMode: data.contentMode,
       editorialModes: data.contentMode === "mix-editorial" ? data.editorialModes : [data.contentMode],
       products,
       targetNetworks,
-      scheduleDays: data.scheduleDays ?? [1, 2, 3, 4, 5],
+      scheduleDays,
       scheduleTimes: resolvedScheduleTimes,
+      smartDistribution: smart,
     });
+
+    const startDate =
+      data.startDate && String(data.startDate).trim()
+        ? new Date(data.startDate)
+        : undefined;
+    const endDate =
+      data.endDate && String(data.endDate).trim() ? new Date(data.endDate) : undefined;
 
     const campaign = await prisma.campaign.create({
       data: {
@@ -191,8 +212,8 @@ export async function POST(request: NextRequest) {
         approvalMode: data.approvalMode,
         trendsPerDay: data.trendsPerDay,
         postsPerDay: data.postsPerDay,
-        startDate: data.startDate ? new Date(data.startDate) : undefined,
-        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        startDate,
+        endDate,
         customSchedule,
         status: "testing",
         mode: "test",
@@ -208,9 +229,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Quantity = trendsPerDay (1..20). Schedules only distribute across next free slots (multi-day).
-    const count = Math.max(1, Math.min(MAX_GENERATION_COUNT, data.trendsPerDay));
-    const slots = allocateNextCampaignSlots(customSchedule, count, new Date());
+    // Schedules distribute narratives across next free slots (multi-day when needed).
+    const after =
+      startDate && startDate.getTime() > Date.now() ? startDate : new Date();
+    const slots = allocateNextCampaignSlots(customSchedule, count, after);
     if (slots.length < count) {
       return NextResponse.json(
         {
