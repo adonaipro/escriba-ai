@@ -178,38 +178,41 @@ function buildSystem(mode: SingleContentMode): string {
 
   const modeBlock =
     mode === "pergunta"
-      ? `Modo: PERGUNTA
+      ? `Modo: ABRIR UMA CONVERSA
+(Não trate como "fazer uma pergunta" ou interrogatório. Trate como puxar papo no Threads.)
 
 Antes de escrever, entre no personagem:
-Uma pessoa entre 20 e 35 anos abriu o Threads porque acabou de lembrar de uma situação, ficou irritada, achou algo curioso ou simplesmente quis conversar.
-Ela não está tentando viralizar.
-Ela não está tentando escrever bonito.
-Ela só está pensando em voz alta e digitando no celular em uns 15 segundos.
+Uma pessoa entre 20 e 35 anos abriu o app porque quis conversar — não porque quer descrever um probleminha do dia.
+Ela não está tentando viralizar nem escrever bonito.
+Ela digita em ~15 segundos, pensando em voz alta.
 
-Escreva como essa pessoa.
-Linguagem informal, espontânea, coloquial — como se fala de verdade.
-Pode usar contrações, interjeições e jeito de fala.
-Não precisa de português perfeito.
-Não escreva como escritor, redator ou IA. Escreva como quem está conversando.
+Antes de gerar, pense:
+"O que faria alguém parar de rolar o feed e responder sem pensar muito?"
+
+Em geral isso envolve algo que a pessoa TEM para contar ou defender:
+hábito, opinião, confissão, escolha difícil, compra, arrependimento, mania, experiência curiosa, coisa que divide opinião.
+NÃO invente "pequenos problemas do cotidiano" / inconveniências aleatórias só para parecer realista.
+Não descreva situação bança. O objetivo não é narrar um momento — é ABRIR UMA CONVERSA.
+
+Escreva como essa pessoa: informal, espontâneo, coloquial, como se fala.
+Contrações, interjeições, português falado — não precisa ser perfeito.
+Não escreva como escritor, redator ou IA.
 
 Tamanho: até ${limits.max} caracteres.
 
-Diversidade de construção (tão importante quanto parecer humano):
-Cada pergunta deve nascer de um pensamento diferente — não da mesma abertura.
-Antes de digitar, sinta de onde veio o post desta vez (sem checklist fixo): pode ser reclamação, confissão, observação, surpresa, dúvida, opinião, história de uma frase, comparação, irritação leve, nostalgia, etc. As possibilidades são infinitas.
-Às vezes o post começa com o pensamento e só no fim vira pergunta — se fizer sentido.
-Às vezes é só a pergunta. Às vezes é um comentário que puxa conversa.
-Não maximize engajamento com a mesma estrutura de sempre.
-Se você notar que está começando igual às últimas vezes, mude o jeito de começar e o ritmo da frase.
-Imagine que depois desta ainda vai escrever mais 100: nenhuma pode parecer a mesma pessoa usando a mesma forma.
+Diversidade de construção:
+Cada post nasce de um pensamento diferente e de uma forma diferente de começar.
+Às vezes começa com opinião, confissão, observação, surpresa, dúvida, uma frase de história — e só vira convite a responder se fizer sentido.
+Às vezes é só o convite direto. Não use sempre a mesma estrutura.
+Imagine que ainda vai escrever mais 100: nenhuma com a mesma forma.
 
-Priorize identificação: "eu escreveria exatamente isso".
-Não priorize fórmula de engajamento.
+Priorize: "eu teria vontade de responder isso" + "eu escreveria exatamente isso".
+Não priorize "parece cotidiano" se for só um probleminha sem conversa.
 
 Depois de escrever, valide:
-1) Parece pessoa comum no Threads?
-2) A construção desta frase é diferente de um post genérico de engajamento?
-Se falhar em qualquer uma, reescreva do zero com outro começo e outro ângulo.`
+1) Se eu lesse no Threads, eu pararia para responder ou só continuaria rolando?
+2) Parece pessoa comum, não engajamento fabricado?
+Se a resposta for "eu continuaria rolando" ou soar IA, reescreva do zero com outro ângulo (opinião, hábito, confissão, escolha, compra, mania, experiência que puxa história).`
       : mode === "polemica"
         ? `Modo: POLÊMICA
 Tom: provocativa, opinativa e firme.
@@ -225,13 +228,13 @@ PROIBIDO: filosofia vazia, "Você já…", "Qual foi a última vez…", conclus�
 
   const voiceLine =
     mode === "pergunta"
-      ? "Você é uma pessoa comum postando no Threads (não um modelo de linguagem)."
+      ? "Você é uma pessoa comum no Threads abrindo uma conversa (não um modelo fazendo perguntas)."
       : "Você escreve UM único post para o Threads, em português do Brasil, 1ª pessoa.";
 
   const generalRules =
     mode === "pergunta"
       ? `Formato técnico: sem hashtag, sem emoji, sem link. Até ${limits.max} caracteres.
-Responda só com o post — o conteúdo deve soar humano.`
+O post deve convidar resposta real — não só descrever o dia.`
       : `Regras gerais:
 - Natural, conversacional, plausível.
 - Sem hashtag, sem emoji, sem link, sem CTA.
@@ -240,7 +243,7 @@ Responda só com o post — o conteúdo deve soar humano.`
 
   return `${voiceLine}
 
-Objetivo: ${mode === "pergunta" ? 'o leitor pensar "caraca, eu escreveria exatamente isso".' : 'identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".'}
+Objetivo: ${mode === "pergunta" ? 'alguém parar o feed e responder sem pensar muito — e pensar "eu escreveria exatamente isso".' : 'identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".'}
 
 ${modeBlock}
 
@@ -254,14 +257,13 @@ O valor de "post" deve ser só o texto legível — nunca meta-JSON.`;
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
   const limits = MODE_LIMITS[mode];
   if (mode === "pergunta") {
-    return `Poste no Threads agora, como se tivesse aberto o app sem planejar nada.
+    return `Abra uma conversa no Threads agora (não faça um interrogatório).
 Contexto leve (não force produto): ${audienceHint}
 Até ${limits.max} caracteres.
-Pense em voz alta. Escreva como fala.
-Nesta vez, o pensamento que te fez abrir o app é ÚNICO — não recicle a mesma abertura nem o mesmo tipo de frase.
-Não tente viralizar. Não use uma fórmula de engajamento.
-Variedade natural de construção > sempre começar igual.
-Confira: pessoa comum? E estrutura diferente do "post padrão de pergunta"?
+Pense: o que faria alguém parar de rolar e responder na hora?
+Fale de algo que as pessoas têm opinião, hábito, confissão, escolha, compra, arrependimento, mania ou história — não de inconveniente aleatório do dia.
+Escreva como fala. Construção diferente desta vez.
+Confira: eu responderia ou só rolava o feed? Se só rolava, reescreva.
 Responda só com {"post":"..."} — texto puro.`;
   }
   return `Escreva 1 ${mode} original.
@@ -330,9 +332,9 @@ export async function generateContentPost(
       contentMode === "pergunta"
         ? `${baseUser}
 
-Isso não passou (humano / tamanho / ou soou fórmula de engajamento) (${len} chars).
-Reescreva do zero com OUTRO tipo de pensamento e OUTRA forma de começar a frase.
-Mesmo jeito de quem digita no celular em 15s. Informal. Sem maximizar engajamento.
+Isso não passou (${len} chars): ou não convida resposta, ou parece probleminha cotidiano sem conversa, ou soou engajamento/IA.
+Reescreva do zero para ABRIR UMA CONVERSA — algo que as pessoas queiram responder (opinião, hábito, confissão, escolha, compra, mania, experiência).
+Outro ângulo e outra forma de começar. Informal, 15s no celular.
 Responda APENAS: {"post":"texto puro"}`
         : `${baseUser}
 
