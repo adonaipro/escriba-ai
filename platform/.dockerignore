@@ -10,3 +10,8 @@ _backup_*
 *.log
 dev.db
 coverage
+tmp-*
+*.tar.gz
+smoke-*.mjs
+validate-*.mjs
+validate-*.sh
