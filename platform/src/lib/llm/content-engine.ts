@@ -179,39 +179,27 @@ function buildSystem(mode: SingleContentMode): string {
   const modeBlock =
     mode === "pergunta"
       ? `Modo: PERGUNTA
-Linguagem: conversa de celular em 15 segundos. Português NATURAL, não "bonito", não de redação, não de pesquisa.
-Como se a pessoa tivesse acabado de pensar em voz alta e digitasse no Threads.
 
-Tamanho: ${limits.label} (máx. ${limits.max} caracteres).
-Pode ser SÓ a pergunta. Não obrigue mini-história nem setup antes.
+Antes de escrever, entre no personagem:
+Uma pessoa entre 20 e 35 anos abriu o Threads porque acabou de lembrar de uma situação, ficou irritada, achou algo curioso ou simplesmente quis conversar.
+Ela não está tentando viralizar.
+Ela não está tentando escrever bonito.
+Ela só está pensando em voz alta e digitando no celular em uns 15 segundos.
 
-O post deve parecer um pensamento espontâneo — não uma enquete, não um formulário, não um título de blog.
+Escreva como essa pessoa.
+Linguagem informal, espontânea, coloquial — como se fala de verdade.
+Pode usar contrações, interjeições e jeito de fala.
+Não precisa de português perfeito.
+Não escreva como escritor, redator ou IA. Escreva como quem está conversando.
 
-Antes de finalizar, pergunte internamente: "Uma pessoa real escreveria isso no Threads?"
-Se a resposta for não, reescreva com palavras do dia a dia.
+Tamanho: até ${limits.max} caracteres. Pode ser só a pergunta (sem mini-história).
 
-Impulso em quem lê (pelo menos um): contar experiência, dar opinião, confessar hábito, lembrar de alguém, escolher entre duas posições.
+Priorize identificação: o leitor deve sentir "eu escreveria exatamente isso".
+Não priorize criatividade forçada nem "pergunta de engajamento".
 
-Direção de SOM (não copie, não vire template):
-- fala de boca, gíria leve, "vocês", "eu", "mais alguém", "sou só eu ou…"
-- pergunta que puxa conversa de verdade
-
-VOCABULÁRIO PROIBIDO (soa IA / formal demais — nunca use):
-trivial, inconveniência, facilitar a vida, compartilhar, compartilhe, situação, enfrenta, enfrentam, rotina diária, no dia a dia (como jargão), de maneira, de forma que, qual situação, você enfrenta, impactar, otimizar, refletir, refletindo, questionar, questionamento, percepção, cotidianidade, absurdamente (forçado), imprescindível, de fato, no final das contas
-
-MOLDES PROIBIDOS:
-- "Você já…"
-- "Qual foi a última vez…"
-- "Alguém mais…?" / "Quem mais já passou…"
-- "Por que sempre que você…"
-- "Qual situação…"
-- "Você enfrenta…"
-- "Compartilhe!" / "Conta aí nos comentários"
-- "É tão frustrante quando…"
-
-Sem futilidade vazia (cabo, embalagem genérica) salvo observação muito específica e humana.
-Sem moral, sem filosofia, sem CTA.
-Invente pergunta nova; não recicle a mesma estrutura.`
+Depois de escrever, valide:
+"Eu realmente acreditaria que essa postagem foi escrita por uma pessoa comum no Threads?"
+Se parecer escrita por IA, reescreva do zero, mais simples e mais falada.`
       : mode === "polemica"
         ? `Modo: POLÊMICA
 Tom: provocativa, opinativa e firme.
@@ -227,16 +215,13 @@ PROIBIDO: filosofia vazia, "Você já…", "Qual foi a última vez…", conclus�
 
   const voiceLine =
     mode === "pergunta"
-      ? "Você escreve UM único post para o Threads, em português do Brasil — pode ser só a pergunta, sem mini-crônica."
+      ? "Você é uma pessoa comum postando no Threads (não um modelo de linguagem)."
       : "Você escreve UM único post para o Threads, em português do Brasil, 1ª pessoa.";
 
   const generalRules =
     mode === "pergunta"
-      ? `Regras gerais:
-- Escreva como fala: curto, coloquial, sem palavras de dicionário raro.
-- Sem hashtag, sem emoji, sem link, sem "compartilhe".
-- Sem mini-história obrigatória.
-- Prefira palavras simples que qualquer um usa no WhatsApp.`
+      ? `Formato técnico: sem hashtag, sem emoji, sem link. Até ${limits.max} caracteres.
+Responda só com o post — o conteúdo deve soar humano.`
       : `Regras gerais:
 - Natural, conversacional, plausível.
 - Sem hashtag, sem emoji, sem link, sem CTA.
@@ -245,7 +230,7 @@ PROIBIDO: filosofia vazia, "Você já…", "Qual foi a última vez…", conclus�
 
   return `${voiceLine}
 
-Objetivo: ${mode === "pergunta" ? "puxar resposta de gente real — experiência, opinião, mania, memória ou escolha. NÃO parecer pesquisa nem texto de IA." : 'identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".'}
+Objetivo: ${mode === "pergunta" ? 'o leitor pensar "caraca, eu escreveria exatamente isso".' : 'identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".'}
 
 ${modeBlock}
 
@@ -259,13 +244,11 @@ O valor de "post" deve ser só o texto legível — nunca meta-JSON.`;
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
   const limits = MODE_LIMITS[mode];
   if (mode === "pergunta") {
-    return `Escreva 1 pergunta de Threads, linguagem de conversa (15 segundos no celular).
-Público (leve, não force produto): ${audienceHint}
-Até ${limits.max} caracteres; ideal 1 frase.
-Só a pergunta (ou observação minúscula + pergunta) — sem crônica.
-Português falado: sem "trivial", "inconveniência", "compartilhe", "qual situação", "você enfrenta", "facilitar a vida".
-Cheque: alguém real postaria isso? Se não, reescreva.
-Sem moldes de engajamento. Sem pesquisa. Sem IA formal.
+    return `Poste uma pergunta no Threads agora, como se tivesse aberto o app sem planejar nada.
+Contexto leve (não force produto): ${audienceHint}
+Até ${limits.max} caracteres.
+Pense em voz alta. Escreva como fala. Não tente viralizar nem soar inteligente.
+Depois confira: parece post de pessoa comum? Se não, reescreva mais natural.
 Responda só com {"post":"..."} — texto puro.`;
   }
   return `Escreva 1 ${mode} original.
@@ -321,19 +304,12 @@ export async function generateContentPost(
   let raw = await call(system, baseUser, config, ctx, seed);
   let post = extractPost(raw);
 
-  const formulaicPergunta =
-    contentMode === "pergunta" &&
-    /você já|qual foi a última vez|alguém mais|quem mais já|por que sempre que você|aquela hora que você|é tão frustrante quando|qual situação|você enfrenta|inconveni[eê]ncia|trivial|compartilhe|facilitar a vida|de maneira que|de forma que|questionamento|cotidianidade|imprescindível/i.test(
-      post || "",
-    );
-
-  // Retry if empty, looks like JSON, out of size band, or formulaic pergunta mold
+  // Retry if empty, looks like JSON, or out of size band
   const needsRetry =
     !post ||
     post.includes('{"post"') ||
     /^\s*\{/.test(post) ||
-    !lengthOk(contentMode, post) ||
-    formulaicPergunta;
+    !lengthOk(contentMode, post);
 
   if (needsRetry) {
     const len = measureThreadsTextLength(post || "");
@@ -341,11 +317,8 @@ export async function generateContentPost(
       contentMode === "pergunta"
         ? `${baseUser}
 
-A resposta anterior soou IA/formal ou usou molde/vocab proibido (${len} chars).
-Reescreva do zero em português de conversa (WhatsApp/Threads), 1 frase se der.
-Só pergunta espontânea. Sem trivial/inconveniência/compartilhe/qual situação/você enfrenta/facilitar a vida.
-Sem "Você já / Quem mais / Alguém mais / Qual foi a última vez".
-Cheque: pessoa real postaria isso em 15s? Se não, mais simples ainda.
+Isso não passou no teste "pessoa comum no Threads" ou saiu do tamanho (${len} chars).
+Reescreva do zero: mesmo jeito de quem pensa em voz alta no celular, informal, sem tentar ficar bonito.
 Responda APENAS: {"post":"texto puro"}`
         : `${baseUser}
 
