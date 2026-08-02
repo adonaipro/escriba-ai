@@ -17,13 +17,9 @@ function requiresProduct(mode?: ContentModeValue | null, editorialModes?: readon
   return !mode || mode === "story-produto" || (mode === "mix-editorial" && !!editorialModes?.includes("story-produto"));
 }
 
-function completeTimes(input: string[], count: number): string[] {
-  const values = new Set(input.filter((time) => /^\d{2}:\d{2}$/.test(time)));
-  for (let index = 0; values.size < count && index < count * 3; index++) {
-    const minute = count === 1 ? 12 * 60 : Math.round((8 * 60 + (index % count) * (14 * 60) / (count - 1)) / 10) * 10;
-    values.add(`${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`);
-  }
-  return [...values].sort().slice(0, count);
+/** Keep only valid HH:mm — never invent or truncate campaign schedule times. */
+function resolveScheduleTimes(input: string[] | undefined): string[] {
+  return [...new Set((input ?? []).filter((time) => /^\d{2}:\d{2}$/.test(time)))].sort();
 }
 
 const productSchema = z.object({
@@ -155,12 +151,15 @@ export async function POST(request: NextRequest) {
       socialAccountId: accountId,
     });
 
-    // Always materialize enough daily slots so generation can place calendar entries
+    // Persist exact user scheduleTimes — no automatic fill/truncate.
     // (manual review still creates paused publications; auto creates scheduled ones).
-    const resolvedScheduleTimes = completeTimes(
-      data.scheduleTimes ?? [],
-      data.trendsPerDay,
-    );
+    const resolvedScheduleTimes = resolveScheduleTimes(data.scheduleTimes);
+    if (resolvedScheduleTimes.length === 0) {
+      return NextResponse.json(
+        { error: "Configure pelo menos um horário de publicação (ex.: 09:00, 12:00, 20:00)." },
+        { status: 400 },
+      );
+    }
     const customSchedule = JSON.stringify({
       contentMode: data.contentMode,
       editorialModes: data.contentMode === "mix-editorial" ? data.editorialModes : [data.contentMode],

@@ -106,6 +106,16 @@ function statusDot(status: string) {
   return "bg-zinc-500";
 }
 
+/** Always show campaign wall-clock time in America/Sao_Paulo (not browser local). */
+function formatScheduleTimeSP(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 function buildEvents(
   grouped: GroupedPubs,
   campaigns: CampaignStatus[],
@@ -770,7 +780,7 @@ export default function CalendarioPage() {
                               <div className="flex-1 min-w-0">
                                 {ev.pubData && (
                                   <p className="text-xs text-zinc-500">
-                                    {format(new Date(ev.pubData.scheduledAt), "HH:mm")}
+                                    {formatScheduleTimeSP(ev.pubData.scheduledAt)}
                                     {ev.pubData.trendPost && (
                                       <span className="ml-2">
                                         &middot; post {ev.pubData.trendPost.position}
@@ -859,7 +869,7 @@ export default function CalendarioPage() {
                               {ev.pubData && (
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="text-xs text-zinc-500">
-                                    {format(new Date(ev.pubData.scheduledAt), "HH:mm")}
+                                    {formatScheduleTimeSP(ev.pubData.scheduledAt)}
                                   </span>
                                   <Badge
                                     variant={

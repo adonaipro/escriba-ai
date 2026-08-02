@@ -1,31 +1,29 @@
 import { prisma } from "@/lib/db";
 import { processGenerationJob } from "@/lib/generation-service";
-
-const TIME_ZONE = "America/Sao_Paulo";
-
-type CampaignSchedule = { scheduleDays?: number[]; scheduleTimes?: string[] };
-
-function localDateKey(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(date);
-}
-
-function parseSchedule(raw: string | null): CampaignSchedule {
-  if (!raw) return {};
-  try { return JSON.parse(raw) as CampaignSchedule; } catch { return {}; }
-}
-
-function dateAtNoon(dateKey: string): Date {
-  return new Date(`${dateKey}T12:00:00-03:00`);
-}
+import {
+  campaignSlotAt,
+  localDateKey,
+  parseSchedule,
+  parseScheduleTimes,
+} from "./scheduler";
 
 export async function ensureCampaignDailyJobs(campaignId: string, now = new Date()) {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: { socialAccount: { select: { isMock: true, status: true } } },
   });
-  if (!campaign || !campaign.socialAccountId || !campaign.socialAccount || campaign.socialAccount.isMock || campaign.socialAccount.status !== "active" || campaign.status === "paused" || campaign.status === "ended" || campaign.endedAt) return [];
+  if (
+    !campaign ||
+    !campaign.socialAccountId ||
+    !campaign.socialAccount ||
+    campaign.socialAccount.isMock ||
+    campaign.socialAccount.status !== "active" ||
+    campaign.status === "paused" ||
+    campaign.status === "ended" ||
+    campaign.endedAt
+  ) {
+    return [];
+  }
 
   const dateKey = localDateKey(now);
   if (campaign.startDate && dateKey < localDateKey(campaign.startDate)) return [];
@@ -33,12 +31,12 @@ export async function ensureCampaignDailyJobs(campaignId: string, now = new Date
 
   const schedule = parseSchedule(campaign.customSchedule);
   const days = schedule.scheduleDays?.length ? schedule.scheduleDays : [0, 1, 2, 3, 4, 5, 6];
-  if (!days.includes(dateAtNoon(dateKey).getDay())) return [];
+  const weekday = new Date(`${dateKey}T12:00:00-03:00`).getDay();
+  if (!days.includes(weekday)) return [];
 
-  const times = (schedule.scheduleTimes ?? [])
-    .filter((time) => /^\d{2}:\d{2}$/.test(time))
-    .sort()
-    .slice(0, campaign.trendsPerDay);
+  // Exact campaign times only — never invent fallbacks.
+  const times = parseScheduleTimes(campaign.customSchedule);
+  if (times.length === 0) return [];
 
   const dayStart = new Date(`${dateKey}T00:00:00-03:00`);
   const dayEnd = new Date(`${dateKey}T23:59:59.999-03:00`);
@@ -53,35 +51,57 @@ export async function ensureCampaignDailyJobs(campaignId: string, now = new Date
     select: { scheduledAt: true },
   });
   const existingJobs = await prisma.generationJob.findMany({
-    where: { campaignId: campaign.id, targetDate: dateAtNoon(dateKey) },
+    where: { campaignId: campaign.id, targetDate: new Date(`${dateKey}T12:00:00-03:00`) },
     select: { generationKey: true, slotIndex: true, status: true },
   });
   const existingKeys = new Set(existingJobs.map((job) => job.generationKey).filter(Boolean));
-  const occupiedSlots = new Set(existingTrends.flatMap((trend) => trend.scheduledAt ? [trend.scheduledAt.getTime()] : []));
-  let missing = Math.max(0, campaign.trendsPerDay - existingTrends.length - existingJobs.filter((job) => job.status !== "completed").length);
+  const occupiedSlots = new Set(
+    existingTrends.flatMap((trend) =>
+      trend.scheduledAt ? [trend.scheduledAt.getTime()] : [],
+    ),
+  );
+
+  let missing = Math.max(
+    0,
+    campaign.trendsPerDay -
+      existingTrends.length -
+      existingJobs.filter((job) => job.status !== "completed").length,
+  );
+
+  // Next free FUTURE times from the campaign list (order preserved). Never invent times.
+  const slotsToday = times
+    .map((time, slotIndex) => ({
+      slotIndex,
+      time,
+      targetSlot: campaignSlotAt(dateKey, time),
+    }))
+    .filter(({ targetSlot }) => targetSlot > now && !occupiedSlots.has(targetSlot.getTime()))
+    .slice(0, campaign.trendsPerDay);
 
   const jobs = [];
-  for (let slotIndex = 0; slotIndex < campaign.trendsPerDay; slotIndex++) {
-    const time = times[slotIndex] ?? times[times.length - 1];
+  for (const { slotIndex, targetSlot } of slotsToday) {
+    if (missing <= 0) break;
+
     const generationKey = `${campaign.id}:${dateKey}:${slotIndex}`;
     if (existingKeys.has(generationKey)) {
       const job = await prisma.generationJob.findUnique({ where: { generationKey } });
       if (job) jobs.push(job);
       continue;
     }
-    const targetSlot = time ? new Date(`${dateKey}T${time}:00-03:00`) : null;
-    if (missing <= 0 || (targetSlot && occupiedSlots.has(targetSlot.getTime()))) continue;
-    jobs.push(await prisma.generationJob.upsert({
-      where: { generationKey },
-      update: {},
-      create: {
-        campaignId: campaign.id,
-        generationKey,
-        targetDate: dateAtNoon(dateKey),
-        targetSlot,
-        slotIndex,
-      },
-    }));
+
+    jobs.push(
+      await prisma.generationJob.upsert({
+        where: { generationKey },
+        update: {},
+        create: {
+          campaignId: campaign.id,
+          generationKey,
+          targetDate: new Date(`${dateKey}T12:00:00-03:00`),
+          targetSlot,
+          slotIndex,
+        },
+      }),
+    );
     missing--;
   }
   return jobs;

@@ -315,27 +315,7 @@ function GenerationProgress({ state }: { state: GenerationState }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-function completeScheduleTimes(input: string[], count: number): string[] {
-  const toMinutes = (time: string) => { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; };
-  const formatMinutes = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
-  const selected = new Set(input.filter((time) => /^\d{2}:\d{2}$/.test(time)).map(toMinutes));
-  const candidates = Array.from({ length: 85 }, (_, index) => 8 * 60 + index * 10);
-  if (selected.size === 0) {
-    for (let index = 0; index < count; index++) {
-      selected.add(count === 1 ? 12 * 60 : Math.round((8 * 60 + index * (14 * 60) / (count - 1)) / 10) * 10);
-    }
-  }
-  while (selected.size < count) {
-    const best = candidates.filter((candidate) => !selected.has(candidate)).sort((a, b) => {
-      const distanceA = Math.min(...[...selected].map((value) => Math.abs(value - a)));
-      const distanceB = Math.min(...[...selected].map((value) => Math.abs(value - b)));
-      return distanceB - distanceA || Math.random() - 0.5;
-    })[0];
-    if (best === undefined) break;
-    selected.add(best);
-  }
-  return [...selected].sort((a, b) => a - b).slice(0, count).map(formatMinutes);
-}
+
 
 export default function NovaCampanhaPage() {
   const router = useRouter();
@@ -365,7 +345,7 @@ export default function NovaCampanhaPage() {
 
   // ── Schedule ──────────────────────────────────────────────────────
   const [scheduleDays,  setScheduleDays]  = useState<number[]>([1, 2, 3, 4, 5]);
-  const [scheduleTimes, setScheduleTimes] = useState<string[]>(["09:00", "20:00"]);
+  const [scheduleTimes, setScheduleTimes] = useState<string[]>(["09:00", "12:00", "20:00"]);
   const [newTime, setNewTime] = useState("12:00");
 
   useEffect(() => {
@@ -501,8 +481,14 @@ export default function NovaCampanhaPage() {
       return;
     }
     let effectiveScheduleTimes = [...scheduleTimes];
-    if (/^\d{2}:\d{2}$/.test(newTime) && !effectiveScheduleTimes.includes(newTime)) effectiveScheduleTimes.push(newTime);
-    if (data.approvalMode === "auto") effectiveScheduleTimes = completeScheduleTimes(effectiveScheduleTimes, data.trendsPerDay);
+    if (/^\d{2}:\d{2}$/.test(newTime) && !effectiveScheduleTimes.includes(newTime)) {
+      effectiveScheduleTimes.push(newTime);
+    }
+    effectiveScheduleTimes = [...new Set(effectiveScheduleTimes.filter((t) => /^\d{2}:\d{2}$/.test(t)))].sort();
+    if (effectiveScheduleTimes.length === 0) {
+      setError("Adicione pelo menos um horário de publicação (ex.: 09:00, 12:00, 20:00).");
+      return;
+    }
 
     setLoading(true);
     setError(null);

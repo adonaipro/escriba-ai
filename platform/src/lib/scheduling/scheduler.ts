@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/db";
-import { allocateUniqueMinutes, floorToMinute } from "./slots";
+import { floorToMinute } from "./slots";
 
 export { allocateUniqueMinutes, floorToMinute } from "./slots";
 
-type ScheduleConfig = { scheduleDays?: number[]; scheduleTimes?: string[] };
+const TIME_ZONE = "America/Sao_Paulo";
 
-function parseSchedule(raw: string | null): ScheduleConfig {
+export type ScheduleConfig = { scheduleDays?: number[]; scheduleTimes?: string[] };
+
+export function parseSchedule(raw: string | null | undefined): ScheduleConfig {
   if (!raw) return {};
   try {
     return JSON.parse(raw) as ScheduleConfig;
@@ -14,97 +16,150 @@ function parseSchedule(raw: string | null): ScheduleConfig {
   }
 }
 
-export function nextCampaignSlot(raw: string | null, after = new Date()): Date | null {
-  const config = parseSchedule(raw);
-  const days = config.scheduleDays?.length ? config.scheduleDays : [0, 1, 2, 3, 4, 5, 6];
-  const times = config.scheduleTimes?.filter((time) => /^\d{2}:\d{2}$/.test(time)).sort() ?? [];
-  if (times.length === 0) return null;
+/** Valid HH:mm entries, sorted, de-duplicated — never invents times. */
+export function parseScheduleTimes(raw: string | null | undefined): string[] {
+  const times = parseSchedule(raw).scheduleTimes ?? [];
+  return [...new Set(times.filter((time) => /^\d{2}:\d{2}$/.test(time)))].sort();
+}
 
-  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
+export function localDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  });
-  const startKey = dateFormatter.format(after);
-  const startDate = new Date(`${startKey}T12:00:00Z`);
-  for (let dayOffset = 0; dayOffset <= 14; dayOffset++) {
-    const day = new Date(startDate);
-    day.setUTCDate(day.getUTCDate() + dayOffset);
-    const dateKey = day.toISOString().slice(0, 10);
-    if (!days.includes(day.getUTCDay())) continue;
+  }).format(date);
+}
+
+/** Wall-clock dateKey + HH:mm in America/Sao_Paulo → absolute Date. */
+export function campaignSlotAt(dateKey: string, time: string): Date {
+  return floorToMinute(new Date(`${dateKey}T${time}:00-03:00`));
+}
+
+function addLocalDays(dateKey: string, dayOffset: number): string {
+  const noon = new Date(`${dateKey}T12:00:00-03:00`);
+  return localDateKey(new Date(noon.getTime() + dayOffset * 86_400_000));
+}
+
+function weekdayLocal(dateKey: string): number {
+  return new Date(`${dateKey}T12:00:00-03:00`).getDay();
+}
+
+/**
+ * Next campaign schedule slot strictly after `after`.
+ * Only uses configured scheduleTimes — never invents fallback times.
+ * Skips times present in `occupiedMs` (minute-precision).
+ */
+export function nextCampaignSlot(
+  raw: string | null | undefined,
+  after = new Date(),
+  occupiedMs?: Set<number>,
+): Date | null {
+  const config = parseSchedule(raw);
+  const times = parseScheduleTimes(raw);
+  if (times.length === 0) return null;
+
+  const days = config.scheduleDays?.length ? config.scheduleDays : [0, 1, 2, 3, 4, 5, 6];
+  const startKey = localDateKey(after);
+
+  for (let dayOffset = 0; dayOffset <= 21; dayOffset++) {
+    const dateKey = addLocalDays(startKey, dayOffset);
+    if (!days.includes(weekdayLocal(dateKey))) continue;
     for (const time of times) {
-      const candidate = new Date(`${dateKey}T${time}:00-03:00`);
-      if (candidate > after) return candidate;
+      const candidate = campaignSlotAt(dateKey, time);
+      if (candidate <= after) continue;
+      if (occupiedMs?.has(candidate.getTime())) continue;
+      return candidate;
     }
   }
   return null;
 }
 
-async function loadOccupiedMinutesForAccount(
+/** Format HH:mm in America/Sao_Paulo for a Date. */
+export function formatSlotTimeSP(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+async function loadOccupiedSlotsForAccount(
   socialAccountId: string | null | undefined,
   excludeTrendId?: string,
 ): Promise<Set<number>> {
   const occupied = new Set<number>();
   if (!socialAccountId) return occupied;
 
-  const pubs = await prisma.publication.findMany({
+  // One occupied mark per trend (first post / trend.scheduledAt), not per reply minute.
+  const trends = await prisma.trend.findMany({
     where: {
-      status: { in: ["scheduled", "paused", "publishing"] },
       campaign: { socialAccountId },
-      ...(excludeTrendId ? { NOT: { trendId: excludeTrendId } } : {}),
+      status: { in: ["scheduled", "paused", "publishing"] },
+      scheduledAt: { not: null },
+      ...(excludeTrendId ? { NOT: { id: excludeTrendId } } : {}),
     },
     select: { scheduledAt: true },
   });
 
-  for (const pub of pubs) {
-    occupied.add(floorToMinute(pub.scheduledAt).getTime());
+  for (const trend of trends) {
+    if (trend.scheduledAt) occupied.add(floorToMinute(trend.scheduledAt).getTime());
   }
   return occupied;
 }
 
 /**
- * Schedule a trend and one Publication per post.
- * Each post on the same SocialAccount gets a unique minute; order preserved.
- * Published items are never modified.
+ * Schedule a trend and one Publication per post at the exact campaign slot.
+ * All posts of the narrative share the same scheduledAt (no +1 minute invention).
+ * If preferred is past/occupied, advances to the next free configured campaign time.
  */
 export async function scheduleTrend(trendId: string, scheduledAt: Date): Promise<void> {
   const trend = await prisma.trend.findUnique({
     where: { id: trendId },
     include: {
       posts: { select: { id: true }, orderBy: { position: "asc" } },
-      campaign: { select: { id: true, socialAccountId: true } },
+      campaign: { select: { id: true, socialAccountId: true, customSchedule: true } },
     },
   });
   if (!trend) throw new Error("Narrativa não encontrada");
 
-  const occupied = await loadOccupiedMinutesForAccount(
+  const occupied = await loadOccupiedSlotsForAccount(
     trend.campaign.socialAccountId,
     trendId,
   );
 
-  const slots =
-    trend.posts.length === 0
-      ? [floorToMinute(scheduledAt)]
-      : allocateUniqueMinutes(scheduledAt, trend.posts.length, occupied);
+  const preferred = floorToMinute(scheduledAt);
+  const now = new Date();
+  let slot: Date | null =
+    preferred > now && !occupied.has(preferred.getTime()) ? preferred : null;
 
-  const trendSlot = slots[0] ?? floorToMinute(scheduledAt);
+  if (!slot) {
+    const after = preferred > now ? preferred : now;
+    slot = nextCampaignSlot(trend.campaign.customSchedule, after, occupied);
+  }
+
+  if (!slot) {
+    throw new Error(
+      "Nenhum horário configurado disponível na campanha. Defina scheduleTimes e tente de novo.",
+    );
+  }
+
+  const exactSlot = floorToMinute(slot);
 
   await prisma.$transaction(async (tx) => {
     await tx.trend.update({
       where: { id: trendId },
-      data: { status: "scheduled", scheduledAt: trendSlot },
+      data: { status: "scheduled", scheduledAt: exactSlot },
     });
 
-    for (let i = 0; i < trend.posts.length; i++) {
-      const post = trend.posts[i]!;
-      const slot = slots[i]!;
+    for (const post of trend.posts) {
       await tx.publication.upsert({
         where: { trendPostId: post.id },
         update: {
           campaignId: trend.campaignId,
           trendId,
-          scheduledAt: slot,
+          scheduledAt: exactSlot,
           status: "scheduled",
           lastError: null,
         },
@@ -112,7 +167,7 @@ export async function scheduleTrend(trendId: string, scheduledAt: Date): Promise
           campaignId: trend.campaignId,
           trendId,
           trendPostId: post.id,
-          scheduledAt: slot,
+          scheduledAt: exactSlot,
           status: "scheduled",
         },
       });

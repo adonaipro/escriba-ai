@@ -385,24 +385,26 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       });
     }
 
-    // Always create calendar slots after generation when a schedule exists.
+    // Calendar slots use ONLY campaign scheduleTimes (never invented minutes/fallback).
     // approvalMode only gates auto-publish (paused vs scheduled), not calendar visibility.
     {
-      let slot = job.targetSlot;
+      const now = new Date();
+      // Ignore past targetSlot — past slots caused immediate external publish.
+      let slot =
+        job.targetSlot && job.targetSlot.getTime() > now.getTime() ? job.targetSlot : null;
       if (!slot) {
         const latest = await prisma.trend.findFirst({
           where: { campaignId: campaign.id, scheduledAt: { not: null } },
           orderBy: { scheduledAt: "desc" },
           select: { scheduledAt: true },
         });
-        const now = new Date();
         const campaignStart =
           campaign.startDate && campaign.startDate > now ? campaign.startDate : now;
         const after =
           latest?.scheduledAt && latest.scheduledAt > campaignStart
             ? latest.scheduledAt
             : campaignStart;
-        slot = nextCampaignSlot(campaign.customSchedule, after);
+        slot = nextCampaignSlot(campaign.customSchedule, after > now ? after : now);
       }
       if (slot) {
         await scheduleTrend(trend.id, slot);
