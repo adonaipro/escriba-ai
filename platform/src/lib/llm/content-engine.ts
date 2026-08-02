@@ -192,14 +192,24 @@ Pode usar contrações, interjeições e jeito de fala.
 Não precisa de português perfeito.
 Não escreva como escritor, redator ou IA. Escreva como quem está conversando.
 
-Tamanho: até ${limits.max} caracteres. Pode ser só a pergunta (sem mini-história).
+Tamanho: até ${limits.max} caracteres.
 
-Priorize identificação: o leitor deve sentir "eu escreveria exatamente isso".
-Não priorize criatividade forçada nem "pergunta de engajamento".
+Diversidade de construção (tão importante quanto parecer humano):
+Cada pergunta deve nascer de um pensamento diferente — não da mesma abertura.
+Antes de digitar, sinta de onde veio o post desta vez (sem checklist fixo): pode ser reclamação, confissão, observação, surpresa, dúvida, opinião, história de uma frase, comparação, irritação leve, nostalgia, etc. As possibilidades são infinitas.
+Às vezes o post começa com o pensamento e só no fim vira pergunta — se fizer sentido.
+Às vezes é só a pergunta. Às vezes é um comentário que puxa conversa.
+Não maximize engajamento com a mesma estrutura de sempre.
+Se você notar que está começando igual às últimas vezes, mude o jeito de começar e o ritmo da frase.
+Imagine que depois desta ainda vai escrever mais 100: nenhuma pode parecer a mesma pessoa usando a mesma forma.
+
+Priorize identificação: "eu escreveria exatamente isso".
+Não priorize fórmula de engajamento.
 
 Depois de escrever, valide:
-"Eu realmente acreditaria que essa postagem foi escrita por uma pessoa comum no Threads?"
-Se parecer escrita por IA, reescreva do zero, mais simples e mais falada.`
+1) Parece pessoa comum no Threads?
+2) A construção desta frase é diferente de um post genérico de engajamento?
+Se falhar em qualquer uma, reescreva do zero com outro começo e outro ângulo.`
       : mode === "polemica"
         ? `Modo: POLÊMICA
 Tom: provocativa, opinativa e firme.
@@ -244,11 +254,14 @@ O valor de "post" deve ser só o texto legível — nunca meta-JSON.`;
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
   const limits = MODE_LIMITS[mode];
   if (mode === "pergunta") {
-    return `Poste uma pergunta no Threads agora, como se tivesse aberto o app sem planejar nada.
+    return `Poste no Threads agora, como se tivesse aberto o app sem planejar nada.
 Contexto leve (não force produto): ${audienceHint}
 Até ${limits.max} caracteres.
-Pense em voz alta. Escreva como fala. Não tente viralizar nem soar inteligente.
-Depois confira: parece post de pessoa comum? Se não, reescreva mais natural.
+Pense em voz alta. Escreva como fala.
+Nesta vez, o pensamento que te fez abrir o app é ÚNICO — não recicle a mesma abertura nem o mesmo tipo de frase.
+Não tente viralizar. Não use uma fórmula de engajamento.
+Variedade natural de construção > sempre começar igual.
+Confira: pessoa comum? E estrutura diferente do "post padrão de pergunta"?
 Responda só com {"post":"..."} — texto puro.`;
   }
   return `Escreva 1 ${mode} original.
@@ -317,8 +330,9 @@ export async function generateContentPost(
       contentMode === "pergunta"
         ? `${baseUser}
 
-Isso não passou no teste "pessoa comum no Threads" ou saiu do tamanho (${len} chars).
-Reescreva do zero: mesmo jeito de quem pensa em voz alta no celular, informal, sem tentar ficar bonito.
+Isso não passou (humano / tamanho / ou soou fórmula de engajamento) (${len} chars).
+Reescreva do zero com OUTRO tipo de pensamento e OUTRA forma de começar a frase.
+Mesmo jeito de quem digita no celular em 15s. Informal. Sem maximizar engajamento.
 Responda APENAS: {"post":"texto puro"}`
         : `${baseUser}
 
