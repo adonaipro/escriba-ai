@@ -874,9 +874,10 @@ export async function buildNarrativeLLM(
       ? buildUniverseFromStoredAnalysis(storedAnalysis)
       : analyzeProduct(productName, productUrl);
     const result = await generateContentPost(universe, contentMode as SingleContentMode, seed, llmConfig);
+    // Tone/emotion come from Content Engine (mode + text) — never hardcoded "reflexivo".
     return {
       role:             "narradora",
-      emotion:          "reflexivo",
+      emotion:          result.emotion,
       conflictObject:   "",
       sceneMoment:      "",
       moralQuestion:    "",
@@ -884,15 +885,15 @@ export async function buildNarrativeLLM(
       setting:          "",
       twist:            "",
       hook:             result.post.split("\n")[0] ?? "",
-      narrativeSummary: `${contentMode} · gerado`,
+      narrativeSummary: `${contentMode} · ${result.tone}`,
       productPosition:  0,
       productStrategy:  "contextual",
-      tone:             "reflexivo",
-      rhythm:           "médio",
+      tone:             result.tone,
+      rhythm:           contentMode === "pergunta" ? "rápido" : contentMode === "polemica" ? "rápido" : "médio",
       conflictType:     contentMode,
       structureType:    "content-engine",
       openingStyle:     contentMode,
-      questionType:     "engagement",
+      questionType:     contentMode === "pergunta" ? "engagement" : "none",
       posts: [{ position: 1, content: result.post, hasMedia: false }],
     } as BuiltNarrative;
   }

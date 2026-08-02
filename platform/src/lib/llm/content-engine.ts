@@ -1,6 +1,5 @@
 // Content Engine V2 — Single-post modes (desabafo / polêmica / pergunta)
-// Same philosophy as Story Engine V2: identification + creative freedom.
-// No fixed betrayal lists, no forced cast. Technical limits only.
+// Mode defines voice. No fixed "reflexivo", no tone hypothesis/learning.
 
 import type { ProductUniverse } from "./product-intelligence-engine";
 import type { LlmProviderConfig } from "./types";
@@ -11,6 +10,16 @@ import {
 } from "@/lib/publishing/threads-limits";
 
 export type SingleContentMode = "desabafo" | "polemica" | "pergunta";
+
+/** Character limits (Threads-aware length). */
+const MODE_LIMITS: Record<
+  SingleContentMode,
+  { min: number; max: number; label: string }
+> = {
+  pergunta: { min: 20, max: 180, label: "1–2 frases, máximo 180 caracteres" },
+  polemica: { min: 150, max: 350, label: "curta e direta, cerca de 150–350 caracteres" },
+  desabafo: { min: 250, max: 500, label: "cerca de 250–500 caracteres" },
+};
 
 interface Ctx {
   callCount: number;
@@ -57,7 +66,7 @@ async function call(
         { role: "user", content: user },
       ],
       temperature: 1.0,
-      max_tokens: 300,
+      max_tokens: 450,
       ...(supportsSeed ? { seed } : {}),
     }),
   });
@@ -75,68 +84,158 @@ async function call(
   return json.choices[0]?.message?.content ?? "";
 }
 
-function extractPost(raw: string): string {
-  const fence = raw.match(/```(?:json)?\s*([\s\S]+?)```/);
-  const clean = fence ? fence[1]! : raw;
-  const s = clean.indexOf("{");
-  const e = clean.lastIndexOf("}");
-  if (s !== -1 && e !== -1) {
+/**
+ * Extract plain post text. Never return raw JSON like {"post":"..."}.
+ */
+export function extractPost(raw: string): string {
+  let text = (raw ?? "").trim();
+  if (!text) return "";
+
+  // Strip markdown fences
+  const fence = text.match(/```(?:json)?\s*([\s\S]+?)```/);
+  if (fence?.[1]) text = fence[1].trim();
+
+  // Prefer JSON object with post field
+  const s = text.indexOf("{");
+  const e = text.lastIndexOf("}");
+  if (s !== -1 && e !== -1 && e > s) {
+    const slice = text.slice(s, e + 1);
     try {
-      const parsed = JSON.parse(clean.slice(s, e + 1)) as { post?: string };
-      if (parsed.post) return parsed.post.trim();
+      const parsed = JSON.parse(slice) as { post?: unknown; content?: unknown; text?: unknown };
+      const candidate =
+        (typeof parsed.post === "string" && parsed.post) ||
+        (typeof parsed.content === "string" && parsed.content) ||
+        (typeof parsed.text === "string" && parsed.text) ||
+        "";
+      if (candidate.trim()) return unwrapQuoted(candidate.trim());
     } catch {
-      // fall through
+      // try regex pull of "post":"..."
+      const m =
+        slice.match(/"post"\s*:\s*"((?:\\.|[^"\\])*)"/) ||
+        slice.match(/"post"\s*:\s*'((?:\\.|[^'\\])*)'/);
+      if (m?.[1]) {
+        try {
+          return unwrapQuoted(JSON.parse(`"${m[1]}"`) as string);
+        } catch {
+          return unwrapQuoted(m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"'));
+        }
+      }
     }
   }
-  return raw.trim();
+
+  // If the whole string still looks like JSON metadata, strip outer braces noise
+  if (/^\s*\{\s*"post"\s*:/.test(text)) {
+    const m = text.match(/"post"\s*:\s*"((?:\\.|[^"\\])*)"/);
+    if (m?.[1]) {
+      try {
+        return unwrapQuoted(JSON.parse(`"${m[1]}"`) as string);
+      } catch {
+        return unwrapQuoted(m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"'));
+      }
+    }
+  }
+
+  // Reject leftover JSON shells
+  if (/^\s*\{[\s\S]*\}\s*$/.test(text) && text.includes('"post"')) {
+    return "";
+  }
+
+  return unwrapQuoted(text);
 }
 
-const MODE_HINT: Record<SingleContentMode, string> = {
-  desabafo:
-    "Formato: um desabafo curto em 1ª pessoa — pensamento espontâneo, como se a pessoa tivesse acabado de viver algo e abrisse o celular.",
-  polemica:
-    "Formato: uma opinião afiada em poucas frases — divide a sala sem ser gratuita; parece algo que alguém diria de verdade.",
-  pergunta:
-    "Formato: um mini-relato ou situação vivida que termina numa pergunta natural — a curiosidade nasce do que foi contado, não de um formulário.",
-};
+function unwrapQuoted(s: string): string {
+  let t = s.trim();
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    t = t.slice(1, -1);
+  }
+  return t.replace(/\\n/g, "\n").replace(/\\"/g, '"').trim();
+}
 
-const PERGUNTA_RULES = `
-Modo pergunta — regras:
-- A pergunta deve nascer da história/situação (identificação ou curiosidade real).
-- PROIBIDO estruturas de formulário: "Você já…", "Qual foi a última vez…", "Alguém mais…?", "Quem mais…?".
-- Prefira perguntas que só façam sentido depois do que foi dito (ângulo, escolha, constrangimento, dúvida honesta).
-- Não comece o post com a pergunta; conte o suficiente para a pergunta fechar com peso.`;
+/** Mode voice for metadata — not hypothesis learning. */
+function toneForMode(mode: SingleContentMode, post: string): string {
+  if (mode === "pergunta") return "casual";
+  if (mode === "polemica") return "provocativo";
+  // desabafo: infer from generated text
+  const lower = post.toLowerCase();
+  if (/indignad|absurdo|não acredito|que raiva|absurda/.test(lower)) return "indignado";
+  if (/frustr|não aguento|cansei|já tentei|de novo/.test(lower)) return "frustrado";
+  if (/decepcion|esperava|me deixou|que decepção/.test(lower)) return "decepcionado";
+  if (/triste|chorei|apert|sozinho|sozinha/.test(lower)) return "emocional";
+  return "emocional";
+}
+
+function emotionForMode(mode: SingleContentMode, post: string): string {
+  if (mode === "pergunta") return "curiosidade";
+  if (mode === "polemica") return "opinião";
+  return toneForMode("desabafo", post);
+}
 
 function buildSystem(mode: SingleContentMode): string {
-  return `Você escreve um único post para o Threads.
+  const limits = MODE_LIMITS[mode];
 
-Objetivo: identificação. Quem lê deve pensar "isso sou eu" ou "conheço alguém assim".
+  const modeBlock =
+    mode === "pergunta"
+      ? `Modo: PERGUNTA
+Tom: casual, curiosa e direta — como alguém postando rápido no Threads.
+Tamanho: ${limits.label} (limite duro: ${limits.max} caracteres).
+Deve parecer algo que uma pessoa realmente publicaria em 10 segundos.
+1–2 frases no máximo. Situação mínima + pergunta natural no final (ou embutida).
+PROIBIDO: "Você já…", "Qual foi a última vez…", "Alguém mais…", "Quem mais…".
+PROIBIDO: reflexão filosófica, conclusão moral, texto de blog.`
+      : mode === "polemica"
+        ? `Modo: POLÊMICA
+Tom: provocativa, opinativa e firme.
+Tamanho: ${limits.label} (limite duro: ${limits.max} caracteres).
+Defenda UMA opinião capaz de gerar discordância — lado claro, sem meias palavras.
+PROIBIDO: "Você já…", "Qual foi a última vez…", reflexão genérica, moral da história, tom de blog.
+Sem pedir desculpas pela opinião.`
+        : `Modo: DESABAFO
+Tom: emocional — indignado, frustrado ou decepcionado conforme o que você inventar na cena.
+Tamanho: ${limits.label} (limite duro: ${limits.max} caracteres).
+Precisa de emoção real + um incômodo CONCRETO (gesto, frase, detalhe do dia a dia).
+PROIBIDO: filosofia vazia, "Você já…", "Qual foi a última vez…", conclusão moral, texto de blog.`;
 
-Antes de escrever, escolha uma situação cotidiana ESPECÍFICA e diferente das batidas (evite mercado, fila, trânsito, chuva genérica, "indo pro trabalho" genérico).
-Você é livre para escolher o assunto, as pessoas e o ângulo.
-Não force traição, ex, ou guerra dos sexos — use só se a situação real pedir.
+  return `Você escreve UM único post para o Threads, em português do Brasil, 1ª pessoa.
 
-${MODE_HINT[mode]}
-${mode === "pergunta" ? PERGUNTA_RULES : ""}
+Objetivo: identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".
 
-Tom: natural, cotidiano, conversacional, plausível. Sem hashtag, sem emoji, sem filosofia vazia.
-Limite: no máximo ${THREADS_TEXT_MAX_CHARS} caracteres.
+${modeBlock}
 
-Responda APENAS com JSON: {"post":"..."}`;
+Regras gerais:
+- Natural, conversacional, plausível.
+- Sem hashtag, sem emoji, sem link, sem CTA.
+- Sem copiar frases prontas de autoajuda.
+- Escolha uma situação específica (evite mercado/fila/trânsito genéricos).
+
+Responda APENAS com JSON válido no formato exato:
+{"post":"texto do post aqui"}
+O valor de "post" deve ser só o texto legível — nunca meta-JSON.`;
 }
 
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
-  return `Escreva 1 ${mode} original e identificável.
-Contexto opcional de público (não force produto): ${audienceHint}
-Seja diferente a cada vez. Não recicle a mesma ideia.${
-    mode === "pergunta"
-      ? "\nLembrete: sem 'Você já…' / 'Qual foi a última vez…'; a pergunta nasce do relato."
-      : ""
-  }`;
+  const limits = MODE_LIMITS[mode];
+  return `Escreva 1 ${mode} original.
+Público (contexto leve, não force produto): ${audienceHint}
+Tamanho alvo: ${limits.label}. Contagem aproximada entre ${limits.min} e ${limits.max} caracteres.
+Seja diferente a cada vez.
+Responda só com {"post":"..."} — o texto final deve ser legível sem chaves JSON.`;
+}
+
+function lengthOk(mode: SingleContentMode, post: string): boolean {
+  const n = measureThreadsTextLength(post);
+  const { min, max } = MODE_LIMITS[mode];
+  // Soft min: allow slightly under for pergunta if still 1 sentence
+  const softMin = mode === "pergunta" ? Math.min(min, 15) : Math.floor(min * 0.85);
+  return n >= softMin && n <= max && n <= THREADS_TEXT_MAX_CHARS;
 }
 
 export interface ContentResult {
   post: string;
+  tone: string;
+  emotion: string;
   callCount: number;
   totalTokens: number;
   durationMs: number;
@@ -152,6 +251,7 @@ export async function generateContentPost(
 ): Promise<ContentResult> {
   const t0 = Date.now();
   const ctx: Ctx = { callCount: 0, totalTokens: 0 };
+  const limits = MODE_LIMITS[contentMode];
 
   const pains = universe?.pains ?? [];
   const audienceHint =
@@ -170,11 +270,21 @@ export async function generateContentPost(
   let raw = await call(system, baseUser, config, ctx, seed);
   let post = extractPost(raw);
 
-  if (measureThreadsTextLength(post) > THREADS_TEXT_MAX_CHARS) {
+  // Retry if empty, looks like JSON, or out of size band
+  const needsRetry =
+    !post ||
+    post.includes('{"post"') ||
+    /^\s*\{/.test(post) ||
+    !lengthOk(contentMode, post);
+
+  if (needsRetry) {
+    const len = measureThreadsTextLength(post || "");
     const retryUser = `${baseUser}
 
-A resposta anterior tinha ${measureThreadsTextLength(post)} caracteres (limite ${THREADS_TEXT_MAX_CHARS}).
-Reescreva o MESMO post com no máximo ${THREADS_TEXT_MAX_CHARS} caracteres, sem perder a ideia.`;
+A resposta anterior foi inválida ou fora do tamanho (${len} caracteres; alvo ${limits.min}–${limits.max}).
+Reescreva do zero o MESMO tipo de post (${contentMode}).
+Tom correto do modo. Sem "Você já…", sem "Qual foi a última vez…", sem moral, sem blog.
+Responda APENAS: {"post":"texto puro"}`;
     try {
       raw = await call(system, retryUser, config, ctx, seed + 1);
       post = extractPost(raw);
@@ -183,10 +293,34 @@ Reescreva o MESMO post com no máximo ${THREADS_TEXT_MAX_CHARS} caracteres, sem 
     }
   }
 
+  // Last-chance cleanup
+  post = extractPost(post);
+  if (!post || post.includes('{"post"') || /^\s*\{[\s\S]*"post"/.test(post)) {
+    throw new Error("Content Engine: não foi possível extrair texto legível do post");
+  }
+
+  // Hard cap Threads
+  if (measureThreadsTextLength(post) > THREADS_TEXT_MAX_CHARS) {
+    const retryUser = `${baseUser}
+
+Encurte para no máximo ${Math.min(limits.max, THREADS_TEXT_MAX_CHARS)} caracteres. Mesma ideia. JSON: {"post":"..."}`;
+    try {
+      raw = await call(system, retryUser, config, ctx, seed + 2);
+      post = extractPost(raw);
+    } catch {
+      // fall through
+    }
+  }
+
   assertThreadsPostsWithinLimit([{ position: 1, content: post }]);
+
+  const tone = toneForMode(contentMode, post);
+  const emotion = emotionForMode(contentMode, post);
 
   return {
     post,
+    tone,
+    emotion,
     callCount: ctx.callCount,
     totalTokens: ctx.totalTokens,
     durationMs: Date.now() - t0,
