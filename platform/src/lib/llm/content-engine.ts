@@ -179,12 +179,32 @@ function buildSystem(mode: SingleContentMode): string {
   const modeBlock =
     mode === "pergunta"
       ? `Modo: PERGUNTA
-Tom: casual, curiosa e direta — como alguém postando rápido no Threads.
+Tom: casual, curiosa e direta — post rápido no Threads para ouvir experiências ou opiniões.
 Tamanho: ${limits.label} (limite duro: ${limits.max} caracteres).
-Deve parecer algo que uma pessoa realmente publicaria em 10 segundos.
-1–2 frases no máximo. Situação mínima + pergunta natural no final (ou embutida).
-PROIBIDO: "Você já…", "Qual foi a última vez…", "Alguém mais…", "Quem mais…".
-PROIBIDO: reflexão filosófica, conclusão moral, texto de blog.`
+
+O post PODE ser só a pergunta. Não obrigue mini-história nem contexto narrativo antes.
+Pode ter no máximo uma observação curta se for muito identificável — nunca “situação banal + pergunta engatilhada”.
+
+A pergunta deve gerar pelo menos UM destes impulsos em quem lê:
+- contar uma experiência
+- defender uma opinião
+- confessar um hábito
+- lembrar de alguém
+- escolher entre duas posições
+
+Temas com peso real (rotina, gente, hábitos, preferências, contradições do dia a dia) — não futilidade tipo “procurar cabo” ou “abrir embalagem” salvo se houver observação muito específica e identificável.
+
+PROIBIDO como fórmula recorrente (não use esses moldes):
+- "Você já…"
+- "Qual foi a última vez…"
+- "Alguém mais…?"
+- "Quem mais já… / Quem mais já passou…"
+- "Por que sempre que você…"
+- "Aquela hora que você…"
+- "É tão frustrante quando…"
+
+PROIBIDO: reflexão filosófica, moral, texto de blog, engajamento forçado.
+Não copie exemplos; invente perguntas novas e espontâneas.`
       : mode === "polemica"
         ? `Modo: POLÊMICA
 Tom: provocativa, opinativa e firme.
@@ -198,17 +218,31 @@ Tamanho: ${limits.label} (limite duro: ${limits.max} caracteres).
 Precisa de emoção real + um incômodo CONCRETO (gesto, frase, detalhe do dia a dia).
 PROIBIDO: filosofia vazia, "Você já…", "Qual foi a última vez…", conclusão moral, texto de blog.`;
 
-  return `Você escreve UM único post para o Threads, em português do Brasil, 1ª pessoa.
+  const voiceLine =
+    mode === "pergunta"
+      ? "Você escreve UM único post para o Threads, em português do Brasil — pode ser só a pergunta, sem mini-crônica."
+      : "Você escreve UM único post para o Threads, em português do Brasil, 1ª pessoa.";
 
-Objetivo: identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".
-
-${modeBlock}
-
-Regras gerais:
+  const generalRules =
+    mode === "pergunta"
+      ? `Regras gerais:
+- Natural, conversacional, plausível — como digitado no celular.
+- Sem hashtag, sem emoji, sem link, sem CTA.
+- Sem copiar frases prontas ou moldes de engajamento.
+- Sem mini-história obrigatória antes da pergunta.`
+      : `Regras gerais:
 - Natural, conversacional, plausível.
 - Sem hashtag, sem emoji, sem link, sem CTA.
 - Sem copiar frases prontas de autoajuda.
-- Escolha uma situação específica (evite mercado/fila/trânsito genéricos).
+- Escolha uma situação específica (evite mercado/fila/trânsito genéricos).`;
+
+  return `${voiceLine}
+
+Objetivo: ${mode === "pergunta" ? "fazer a pessoa querer responder com experiência, opinião, hábito ou escolha." : 'identificação. Quem lê pensa "isso sou eu" ou "já ouvi isso".'}
+
+${modeBlock}
+
+${generalRules}
 
 Responda APENAS com JSON válido no formato exato:
 {"post":"texto do post aqui"}
@@ -217,6 +251,16 @@ O valor de "post" deve ser só o texto legível — nunca meta-JSON.`;
 
 function buildUser(mode: SingleContentMode, audienceHint: string): string {
   const limits = MODE_LIMITS[mode];
+  if (mode === "pergunta") {
+    return `Escreva 1 pergunta original e espontânea para o Threads.
+Público (contexto leve, não force produto): ${audienceHint}
+Tamanho: até ${limits.max} caracteres; ideal 1 frase (no máximo 2).
+Pode ser só a pergunta — sem setup narrativo.
+Impulsione resposta (experiência, opinião, hábito, lembrar alguém ou escolher entre posições).
+Evite futilidade e os moldes proibidos (Você já / Quem mais / Alguém mais / Qual foi a última vez / Por que sempre que você…).
+Seja diferente a cada vez. Não use templates.
+Responda só com {"post":"..."} — texto puro dentro do campo.`;
+  }
   return `Escreva 1 ${mode} original.
 Público (contexto leve, não force produto): ${audienceHint}
 Tamanho alvo: ${limits.label}. Contagem aproximada entre ${limits.min} e ${limits.max} caracteres.
@@ -270,16 +314,31 @@ export async function generateContentPost(
   let raw = await call(system, baseUser, config, ctx, seed);
   let post = extractPost(raw);
 
-  // Retry if empty, looks like JSON, or out of size band
+  const formulaicPergunta =
+    contentMode === "pergunta" &&
+    /você já|qual foi a última vez|alguém mais|quem mais já|por que sempre que você|aquela hora que você|é tão frustrante quando/i.test(
+      post || "",
+    );
+
+  // Retry if empty, looks like JSON, out of size band, or formulaic pergunta mold
   const needsRetry =
     !post ||
     post.includes('{"post"') ||
     /^\s*\{/.test(post) ||
-    !lengthOk(contentMode, post);
+    !lengthOk(contentMode, post) ||
+    formulaicPergunta;
 
   if (needsRetry) {
     const len = measureThreadsTextLength(post || "");
-    const retryUser = `${baseUser}
+    const retryUser =
+      contentMode === "pergunta"
+        ? `${baseUser}
+
+A resposta anterior foi inválida, fora do tamanho (${len} chars) ou usou molde de engajamento.
+Reescreva do zero: UMA pergunta espontânea (pode ser só a pergunta), sem mini-história.
+Sem "Você já / Quem mais / Alguém mais / Qual foi a última vez / Por que sempre que você…".
+Responda APENAS: {"post":"texto puro"}`
+        : `${baseUser}
 
 A resposta anterior foi inválida ou fora do tamanho (${len} caracteres; alvo ${limits.min}–${limits.max}).
 Reescreva do zero o MESMO tipo de post (${contentMode}).
