@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getPublishingAccountId } from "@/lib/account";
 import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
 import { z } from "zod";
+import { createOrReuseNarrativeShortLink, publicShortUrl, replaceNarrativeLink } from "@/lib/short-links";
 
 const postSchema = z.object({ position: z.number(), content: z.string(), hasMedia: z.boolean() });
 const narrativeSchema = z.object({
@@ -62,8 +63,25 @@ export async function POST(req: NextRequest) {
         campaignId: campaign.id, type: "created", title: "Promovida do Laboratório",
         description: `${narratives.length} narrativa(s) promovida(s) do Laboratório`,
       }});
-      return { campaignId: campaign.id, trendIds };
+      return { campaignId: campaign.id, trendIds, socialAccountId: campaign.socialAccountId };
     });
+    for (let index = 0; index < result.trendIds.length; index += 1) {
+      const trendId = result.trendIds[index];
+      const shortLink = await createOrReuseNarrativeShortLink({
+        destinationUrl: data.productUrl,
+        workspaceId: profileId,
+        socialAccountId: result.socialAccountId,
+        campaignId: result.campaignId,
+        trendId,
+        marketplace: data.marketplace,
+      });
+      const shortUrl = publicShortUrl(shortLink.code);
+      const posts = await prisma.trendPost.findMany({ where: { trendId }, select: { id: true, content: true } });
+      await prisma.$transaction(posts.map((post) => prisma.trendPost.update({
+        where: { id: post.id },
+        data: { content: replaceNarrativeLink(post.content, data.productUrl, shortUrl) },
+      })));
+    }
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues[0].message }, { status: 400 });

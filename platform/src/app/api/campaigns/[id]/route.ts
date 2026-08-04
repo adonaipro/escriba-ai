@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { z } from "zod";
+import { getShortLinkMetrics } from "@/lib/analytics/short-links";
 
 const updateSchema = z.object({
   status: z.enum(["testing", "scale_eligible", "scaling", "monitoring", "saturating", "paused", "ended"]).optional(),
@@ -48,14 +49,26 @@ export async function GET(
   }
 
   const publishedPubs = campaign.publications.filter((p) => p.status === "published");
+  const shortLinkMetrics = await getShortLinkMetrics({ workspaceId: session.user.profile.id, campaignId: id });
+  const narrativeMetrics = new Map(shortLinkMetrics.narratives.map((item) => [item.trendId, item]));
   const metrics = {
-    totalClicks: publishedPubs.reduce((s, p) => s + (p.clicks || 0), 0),
+    totalClicks: shortLinkMetrics.totalClicks,
+    uniqueClicks: shortLinkMetrics.uniqueClicks,
     totalImpressions: publishedPubs.reduce((s, p) => s + (p.impressions || 0), 0),
     totalRevenue: publishedPubs.reduce((s, p) => s + (p.revenueBrl || 0), 0),
     totalConversions: publishedPubs.reduce((s, p) => s + (p.conversions || 0), 0),
   };
 
-  return NextResponse.json({ campaign: { ...campaign, metrics } });
+  return NextResponse.json({
+    campaign: {
+      ...campaign,
+      trends: campaign.trends.map((trend) => {
+        const tracked = narrativeMetrics.get(trend.id);
+        return { ...trend, totalClicks: tracked?.clicks ?? 0, uniqueClicks: tracked?.uniqueClicks ?? 0, trackedCtr: tracked?.ctr ?? 0 };
+      }),
+      metrics,
+    },
+  });
 }
 
 export async function PATCH(

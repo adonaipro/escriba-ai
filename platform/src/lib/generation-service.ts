@@ -12,6 +12,7 @@ import { buildNarrativeLLM } from "./llm/narrative-engine";
 import type { ContentMode } from "./llm/pipeline-types";
 import { assertThreadsPostsWithinLimit } from "./publishing/threads-limits";
 import { withGenerationRetry } from "./llm/resilient-generate";
+import { createOrReuseNarrativeShortLink, publicShortUrl, replaceNarrativeLink } from "./short-links";
 
 type HypothesisDimension = "tone" | "rhythm" | "productStrategy" | "questionType" | "conflictType" | "openingStyle" | "structureType";
 const DIMENSIONS: HypothesisDimension[] = ["tone", "rhythm", "productStrategy", "questionType", "conflictType", "openingStyle", "structureType"];
@@ -416,12 +417,23 @@ export async function processGenerationJob(jobId: string): Promise<void> {
       },
     });
 
+    const shortLink = await createOrReuseNarrativeShortLink({
+      destinationUrl: productUrl,
+      workspaceId: campaign.profileId,
+      socialAccountId: campaign.socialAccountId,
+      campaignId: campaign.id,
+      trendId: trend.id,
+      productId: campaign.productId,
+      marketplace: campaign.marketplace,
+    });
+    const shortUrl = publicShortUrl(shortLink.code);
+
     for (const p of output.posts) {
       await prisma.trendPost.create({
         data: {
           trendId: trend.id,
           position: p.position,
-          content: p.content,
+          content: replaceNarrativeLink(p.content, productUrl, shortUrl),
           hasMedia: p.hasMedia,
         },
       });

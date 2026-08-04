@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "test:short-links": "node --env-file=.env --import tsx --test src/lib/short-links.test.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "prisma": {

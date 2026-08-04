@@ -7,6 +7,7 @@ import { z } from "zod";
 import { generateTrend } from "@/lib/engines/trend-engine";
 import { ACCOUNT_COOKIE } from "@/lib/account";
 import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
+import { createOrReuseNarrativeShortLink, publicShortUrl, replaceNarrativeLink } from "@/lib/short-links";
 
 const createSchema = z.object({
   campaignId: z.string().min(1),
@@ -89,6 +90,16 @@ export async function POST(request: NextRequest) {
         status: campaign.approvalMode === "auto" ? "approved" : "draft",
       },
     });
+    const shortLink = await createOrReuseNarrativeShortLink({
+      destinationUrl: campaign.productUrl,
+      workspaceId: campaign.profileId,
+      socialAccountId: campaign.socialAccountId,
+      campaignId: campaign.id,
+      trendId: trend.id,
+      productId: campaign.productId,
+      marketplace: campaign.marketplace,
+    });
+    const shortUrl = publicShortUrl(shortLink.code);
 
     const posts = await Promise.all(
       generated.posts.map((p) =>
@@ -96,7 +107,7 @@ export async function POST(request: NextRequest) {
           data: {
             trendId: trend.id,
             position: p.position,
-            content: p.content,
+            content: replaceNarrativeLink(p.content, campaign.productUrl, shortUrl),
             hasMedia: p.hasMedia,
             mediaType: p.mediaType,
           },

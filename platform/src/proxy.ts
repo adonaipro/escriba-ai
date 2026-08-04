@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   "/api/cron/publish",
   "/api/integrations/threads/deauthorize",
   "/api/integrations/threads/data-deletion",
+  "/go/",
 ];
 
 export function proxy(request: NextRequest) {

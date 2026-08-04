@@ -72,6 +72,9 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
           },
         },
       },
+      shortLinks: {
+        select: { clicks: { where: { clickedAt: publishedAt }, select: { id: true } } },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -79,7 +82,7 @@ async function getWorkspaceData(profileId: string, range: ReturnType<typeof reso
   const metrics: AccountMetrics[] = accounts.map((a) => {
     const everyPublication = a.campaigns.flatMap((c) => c.publications);
     const allPubs = everyPublication.filter((publication) => publication.status === "published");
-    const totalClicks = allPubs.reduce((s, p) => s + (p.clicks ?? 0), 0);
+    const totalClicks = a.shortLinks.reduce((sum, link) => sum + link.clicks.length, 0);
     const totalImpressions = allPubs.reduce((s, p) => s + (p.impressions ?? 0), 0);
     // Revenue/conversions are profile-level Shopee affiliate metrics (not per social account).
     const totalConversions = 0;

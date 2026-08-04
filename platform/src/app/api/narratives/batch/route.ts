@@ -8,6 +8,7 @@ import {
   type BatchNarrative,
 } from "@/lib/llm/narrative-batch";
 import { assertThreadsPostsWithinLimit } from "@/lib/publishing/threads-limits";
+import { createOrReuseNarrativeShortLink, publicShortUrl, replaceNarrativeLink } from "@/lib/short-links";
 
 export const runtime = "nodejs";
 
@@ -143,6 +144,18 @@ export async function POST() {
   const saved: ReturnType<typeof buildSavedShape>[] = [];
   for (const tmpl of templates) {
     const trend = await saveTrend(campaign.id, tmpl);
+    const shortLink = await createOrReuseNarrativeShortLink({
+      destinationUrl: PRODUCT_URL,
+      workspaceId: profileId,
+      campaignId: campaign.id,
+      trendId: trend.id,
+      marketplace: "shopee",
+    });
+    const shortUrl = publicShortUrl(shortLink.code);
+    trend.posts = await Promise.all(trend.posts.map((post) => prisma.trendPost.update({
+      where: { id: post.id },
+      data: { content: replaceNarrativeLink(post.content, PRODUCT_URL, shortUrl) },
+    })));
     saved.push(buildSavedShape(trend, tmpl));
   }
 

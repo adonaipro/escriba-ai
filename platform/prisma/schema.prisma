@@ -49,6 +49,7 @@ model Profile {
   products            Product[]
   shopeeOffers        ShopeeOffer[]
   shopeeConversions   ShopeeConversion[]
+  shortLinks          ShortLink[]
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -231,6 +232,7 @@ model Campaign {
   learnings       Learning[]
   events          CampaignEvent[]
   generationJobs  GenerationJob[]
+  shortLinks      ShortLink[]
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -238,37 +240,38 @@ model Campaign {
 // ─────────────────────────────────────────────────────────────────
 
 model Trend {
-  id               String        @id @default(cuid())
-  campaignId       String
-  narratorId       String? // which narrator told this story
-  format           String
-  contentMode      String? // story-produto | story-organico | desabafo | polemica | pergunta
-  hook             String
-  narrativeSummary String
-  status           String        @default("draft")
-  qualityScore     Float?
-  postsCount       Int           @default(0)
-  scheduledAt      DateTime?
-  publishedAt      DateTime?
-  totalClicks      Int           @default(0)
-  totalImpressions Int           @default(0)
-  totalConversions Int           @default(0)
-  totalRevenueBrl  Float         @default(0)
+  id                 String        @id @default(cuid())
+  campaignId         String
+  narratorId         String? // which narrator told this story
+  format             String
+  contentMode        String? // story-produto | story-organico | desabafo | polemica | pergunta
+  hook               String
+  narrativeSummary   String
+  status             String        @default("draft")
+  qualityScore       Float?
+  postsCount         Int           @default(0)
+  scheduledAt        DateTime?
+  publishedAt        DateTime?
+  totalClicks        Int           @default(0)
+  totalImpressions   Int           @default(0)
+  totalConversions   Int           @default(0)
+  totalRevenueBrl    Float         @default(0)
   metricsEvaluatedAt DateTime?
   // Experiment dimensions — every narrative is an experiment data point
-  productStrategy  String? // "clickbait" | "contextual" | "hybrid"
-  tone             String? // "emocional" | "objetivo" | "reflexivo" | "leve" | "intenso"
-  rhythm           String? // "rápido" | "médio" | "lento"
-  structureType    String? // "staircase" | "flash" | "reflection" | "decision"
-  openingStyle     String? // "ação direta" | "contexto primeiro" | "emoção primeiro"
-  conflictType     String? // "familiar" | "financeiro" | "relacionamento" | "trabalho" | "cotidiano"
-  questionType     String? // "moral" | "experiência" | "decisão" | "validação"
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  campaign         Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  narrator         Narrator?     @relation(fields: [narratorId], references: [id])
-  posts            TrendPost[]
-  publications     Publication[]
+  productStrategy    String? // "clickbait" | "contextual" | "hybrid"
+  tone               String? // "emocional" | "objetivo" | "reflexivo" | "leve" | "intenso"
+  rhythm             String? // "rápido" | "médio" | "lento"
+  structureType      String? // "staircase" | "flash" | "reflection" | "decision"
+  openingStyle       String? // "ação direta" | "contexto primeiro" | "emoção primeiro"
+  conflictType       String? // "familiar" | "financeiro" | "relacionamento" | "trabalho" | "cotidiano"
+  questionType       String? // "moral" | "experiência" | "decisão" | "validação"
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  campaign           Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  narrator           Narrator?     @relation(fields: [narratorId], references: [id])
+  posts              TrendPost[]
+  publications       Publication[]
+  shortLinks         ShortLink[]
 }
 
 model TrendPost {
@@ -287,35 +290,35 @@ model TrendPost {
 }
 
 model Publication {
-  id           String     @id @default(cuid())
-  campaignId   String
-  trendId      String?
-  trendPostId  String?    @unique
-  scheduledAt  DateTime
-  publishedAt  DateTime?
-  status       String     @default("scheduled")
-  clicks       Int?
-  impressions  Int?
-  likes        Int?
-  replies      Int?
-  reposts      Int?
-  quotes       Int?
-  shares       Int?
-  conversions  Int?
-  revenueBrl   Float?
-  externalId   String?
-  externalUrl  String?
-  attempts     Int        @default(0)
-  lastError    String?
-  processingAt DateTime?
-  metricsSyncedAt DateTime?
+  id               String                      @id @default(cuid())
+  campaignId       String
+  trendId          String?
+  trendPostId      String?                     @unique
+  scheduledAt      DateTime
+  publishedAt      DateTime?
+  status           String                      @default("scheduled")
+  clicks           Int?
+  impressions      Int?
+  likes            Int?
+  replies          Int?
+  reposts          Int?
+  quotes           Int?
+  shares           Int?
+  conversions      Int?
+  revenueBrl       Float?
+  externalId       String?
+  externalUrl      String?
+  attempts         Int                         @default(0)
+  lastError        String?
+  processingAt     DateTime?
+  metricsSyncedAt  DateTime?
   metricsLastError String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  campaign     Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  trend        Trend?     @relation(fields: [trendId], references: [id])
-  trendPost    TrendPost? @relation(fields: [trendPostId], references: [id])
-  metricSnapshots PublicationMetricSnapshot[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  campaign         Campaign                    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  trend            Trend?                      @relation(fields: [trendId], references: [id])
+  trendPost        TrendPost?                  @relation(fields: [trendPostId], references: [id])
+  metricSnapshots  PublicationMetricSnapshot[]
 }
 
 model PublicationMetricSnapshot {
@@ -351,24 +354,25 @@ model Learning {
 }
 
 model SocialAccount {
-  id               String            @id @default(cuid())
-  profileId        String
-  network          String
-  externalId       String?
-  username         String?
-  displayName      String? // human label, e.g. "Casa Real"
-  avatarUrl        String?
-  status           String            @default("active")
-  isMock           Boolean           @default(true)
-  accessToken      String?
-  tokenExpiresAt   DateTime?
-  tokenScopes      String?
-  lastVerifiedAt   DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  profile          Profile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  accountNarrators AccountNarrator[]
-  campaigns        Campaign[]
+  id                String             @id @default(cuid())
+  profileId         String
+  network           String
+  externalId        String?
+  username          String?
+  displayName       String? // human label, e.g. "Casa Real"
+  avatarUrl         String?
+  status            String             @default("active")
+  isMock            Boolean            @default(true)
+  accessToken       String?
+  tokenExpiresAt    DateTime?
+  tokenScopes       String?
+  lastVerifiedAt    DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  profile           Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  accountNarrators  AccountNarrator[]
+  campaigns         Campaign[]
+  shortLinks        ShortLink[]
   narrativePatterns NarrativePattern[]
 
   @@index([profileId])
@@ -388,23 +392,23 @@ model LlmConfig {
 }
 
 model GenerationJob {
-  id          String    @id @default(cuid())
-  campaignId  String
-  trendId     String?
-  generationKey String? @unique
-  targetDate  DateTime?
-  targetSlot  DateTime?
-  slotIndex   Int?
-  status      String    @default("pending")
-  statusLabel String    @default("Aguardando...")
-  progress    Int       @default(0)
-  result      String?
-  error       String?
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  campaignId    String
+  trendId       String?
+  generationKey String?   @unique
+  targetDate    DateTime?
+  targetSlot    DateTime?
+  slotIndex     Int?
+  status        String    @default("pending")
+  statusLabel   String    @default("Aguardando...")
+  progress      Int       @default(0)
+  result        String?
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  campaign      Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
 
 model CampaignEvent {
@@ -419,19 +423,19 @@ model CampaignEvent {
 }
 
 model NarrativePattern {
-  id         String   @id @default(cuid())
-  profileId  String
+  id              String         @id @default(cuid())
+  profileId       String
   socialAccountId String?
-  type       String
-  value      String
-  usageCount Int      @default(0)
-  winCount   Int      @default(0)
-  evaluatedCount Int  @default(0)
-  totalCtr   Float    @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  socialAccount SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  type            String
+  value           String
+  usageCount      Int            @default(0)
+  winCount        Int            @default(0)
+  evaluatedCount  Int            @default(0)
+  totalCtr        Float          @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  profile         Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, socialAccountId, type, value])
   @@index([socialAccountId])
@@ -482,38 +486,82 @@ model Product {
   profile          Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
   analysis         ProductAnalysis?
   campaigns        Campaign[]
+  shortLinks       ShortLink[]
 
   @@index([profileId])
   @@index([profileId, marketplace])
 }
 
+model ShortLink {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  destinationUrl  String
+  workspaceId     String
+  socialAccountId String?
+  campaignId      String?
+  trendId         String?
+  productId       String?
+  marketplace     String?
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  workspace       Profile          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount?   @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  campaign        Campaign?        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  trend           Trend?           @relation(fields: [trendId], references: [id], onDelete: Cascade)
+  product         Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  clicks          ShortLinkClick[]
+
+  @@index([campaignId])
+  @@index([trendId])
+  @@index([productId])
+  @@index([socialAccountId])
+  @@index([workspaceId, createdAt])
+}
+
+model ShortLinkClick {
+  id          String    @id @default(cuid())
+  shortLinkId String
+  clickedAt   DateTime  @default(now())
+  referer     String?
+  userAgent   String?
+  ipHash      String
+  country     String?
+  isUnique    Boolean   @default(false)
+  shortLink   ShortLink @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shortLinkId, clickedAt])
+  @@index([clickedAt])
+  @@index([shortLinkId, ipHash, clickedAt])
+}
+
 // SHOPEE OFFER — local cache of the affiliate catalog.
 // Offers are only promoted to Product when the user explicitly imports them.
 model ShopeeOffer {
-  id                     String   @id @default(cuid())
-  profileId              String
-  itemId                 String
-  productName            String
-  commissionRate         Float    @default(0)
-  sellerCommissionRate   Float    @default(0)
-  shopeeCommissionRate   Float    @default(0)
-  commission             Float    @default(0)
-  priceMin               Float    @default(0)
-  priceMax               Float?
-  sales                  Int      @default(0)
-  ratingStar             Float    @default(0)
-  imageUrl               String   @default("")
-  productLink            String   @default("")
-  offerLink              String   @default("")
-  shopId                 String   @default("")
-  shopName               String   @default("")
-  productCatIds          String   @default("[]")
-  periodStartTime        String?
-  periodEndTime          String?
-  lastSyncedAt           DateTime @default(now())
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  profile                Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  profileId            String
+  itemId               String
+  productName          String
+  commissionRate       Float    @default(0)
+  sellerCommissionRate Float    @default(0)
+  shopeeCommissionRate Float    @default(0)
+  commission           Float    @default(0)
+  priceMin             Float    @default(0)
+  priceMax             Float?
+  sales                Int      @default(0)
+  ratingStar           Float    @default(0)
+  imageUrl             String   @default("")
+  productLink          String   @default("")
+  offerLink            String   @default("")
+  shopId               String   @default("")
+  shopName             String   @default("")
+  productCatIds        String   @default("[]")
+  periodStartTime      String?
+  periodEndTime        String?
+  lastSyncedAt         DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  profile              Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, itemId])
   @@index([profileId, commissionRate])
@@ -525,32 +573,32 @@ model ShopeeOffer {
 // SHOPEE CONVERSION — item-level rows from affiliate conversionReport.
 // Source of truth for commission / orders / items vs the official Shopee panel.
 model ShopeeConversion {
-  id                     String   @id @default(cuid())
+  id                     String    @id @default(cuid())
   profileId              String
   conversionId           String
   purchaseTime           DateTime
   clickTime              DateTime?
-  totalCommission        Float    @default(0)
-  sellerCommission       Float    @default(0)
-  shopeeCommissionCapped Float    @default(0)
+  totalCommission        Float     @default(0)
+  sellerCommission       Float     @default(0)
+  shopeeCommissionCapped Float     @default(0)
   buyerType              String?
   device                 String?
   utmContent             String?
-  orderId                String   @default("")
-  orderStatus            String   @default("")
-  itemId                 String   @default("")
+  orderId                String    @default("")
+  orderStatus            String    @default("")
+  itemId                 String    @default("")
   /// Index within the order.items array so duplicate itemIds are not collapsed.
-  lineIndex              Int      @default(0)
-  itemName               String   @default("")
-  shopName               String   @default("")
-  itemPrice              Float    @default(0)
-  qty                    Int      @default(0)
-  itemTotalCommission    Float    @default(0)
+  lineIndex              Int       @default(0)
+  itemName               String    @default("")
+  shopName               String    @default("")
+  itemPrice              Float     @default(0)
+  qty                    Int       @default(0)
+  itemTotalCommission    Float     @default(0)
   attributionType        String?
-  lastSyncedAt           DateTime @default(now())
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  profile                Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  lastSyncedAt           DateTime  @default(now())
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  profile                Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, conversionId, orderId, itemId, lineIndex])
   @@index([profileId, purchaseTime])

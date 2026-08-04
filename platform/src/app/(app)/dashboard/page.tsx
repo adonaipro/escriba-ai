@@ -32,6 +32,7 @@ import { DateRangeFilter } from "@/components/analytics/date-range-filter";
 import { PerformanceChart } from "@/components/analytics/performance-chart";
 import { hasShopeeCredentials } from "@/lib/providers/shopee-client";
 import { getShopeeMetricsSummary, syncShopeeConversions } from "@/lib/providers/shopee-conversions";
+import { getShortLinkMetrics } from "@/lib/analytics/short-links";
 
 function statusColor(status: string) {
   const colors: Record<string, string> = {
@@ -148,9 +149,14 @@ async function getDashboardData(profileId: string, accountId: string | null, ran
     }),
   ]);
 
+  const trackedLinks = await getShortLinkMetrics(
+    { workspaceId: profileId, ...(accountId ? { socialAccountId: accountId } : {}) },
+    range.from ?? undefined,
+    range.to,
+  );
   // Threads-side metrics (impressions/engagement from Meta insights).
   // Affiliate revenue/conversions come from Shopee conversionReport — not from publications.
-  const totalClicks = publications.reduce((s, p) => s + (p.clicks || 0), 0);
+  const totalClicks = trackedLinks.totalClicks;
   const totalImpressions = publications.reduce((s, p) => s + (p.impressions || 0), 0);
   const totalEngagements = publications.reduce((s, p) => s + (p.likes || 0) + (p.replies || 0) + (p.reposts || 0) + (p.quotes || 0) + (p.shares || 0), 0);
   const engagementRate = totalImpressions > 0 ? (totalEngagements / totalImpressions) * 100 : 0;
@@ -224,7 +230,7 @@ async function getDashboardData(profileId: string, accountId: string | null, ran
   }
 
   return {
-    metrics: { totalClicks, totalImpressions, avgCtr, totalEngagements, engagementRate, publishedPosts, publishedCampaigns, latestMetricsSync },
+    metrics: { totalClicks, uniqueClicks: trackedLinks.uniqueClicks, totalImpressions, avgCtr, totalEngagements, engagementRate, publishedPosts, publishedCampaigns, latestMetricsSync },
     campaigns,
     scaleEligible,
     saturating,

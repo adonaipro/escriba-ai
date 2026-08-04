@@ -53,6 +53,8 @@ type Trend = {
   scheduledAt: string | null;
   publishedAt: string | null;
   totalClicks: number;
+  uniqueClicks: number;
+  trackedCtr: number;
   totalImpressions: number;
   totalConversions: number;
   totalRevenueBrl: number;
@@ -106,6 +108,7 @@ type Campaign = {
   startDate: string | null;
   metrics: {
     totalClicks: number;
+    uniqueClicks: number;
     totalImpressions: number;
     totalRevenue: number;
     totalConversions: number;
@@ -297,6 +300,13 @@ function TrendRow({ trend }: { trend: Trend }) {
             </span>
           </div>
           <p className="text-sm text-zinc-200 line-clamp-2">{trend.hook}</p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+            <span>Impressões: {formatNumber(trend.totalImpressions)}</span>
+            <span>Cliques Escriba: {formatNumber(trend.totalClicks)}</span>
+            <span>Únicos: {formatNumber(trend.uniqueClicks)}</span>
+            <span>CTR: {formatPercent(trend.trackedCtr)}</span>
+            <span>Conversões Shopee: {formatNumber(trend.totalConversions)}</span>
+          </div>
           {trend.publishedAt && (
             <p className="text-xs text-zinc-500 mt-1">
               Publicada em {format(new Date(trend.publishedAt), "dd/MM/yyyy", { locale: ptBR })}
@@ -698,7 +708,7 @@ export default function CampaignDetailPage() {
       {/* Metrics */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "Cliques", value: formatNumber(campaign.metrics.totalClicks), icon: MousePointerClick, color: "text-blue-400" },
+          { label: "Cliques Escriba", value: formatNumber(campaign.metrics.totalClicks), icon: MousePointerClick, color: "text-blue-400" },
           { label: "Impressões", value: formatNumber(campaign.metrics.totalImpressions), icon: Eye, color: "text-pink-400" },
           { label: "CTR", value: formatPercent(ctr), icon: TrendingUp, color: "text-amber-400" },
           { label: "Receita", value: formatCurrency(campaign.metrics.totalRevenue), icon: DollarSign, color: "text-emerald-400" },
